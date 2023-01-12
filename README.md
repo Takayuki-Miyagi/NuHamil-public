@@ -17,7 +17,7 @@ It is also possible to compute the few body system with the Jacobi coordinate no
 Download the code:
 ```
 cd ~
-git clone https://github.com/Takayuki-Miyagi/NuHamil.git
+git clone https://github.com/Takayuki-Miyagi/NuHamil-public.git
 ```
 (Going to your home directory is not mandatory, but recommended.)
 
