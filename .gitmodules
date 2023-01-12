@@ -1,0 +1,6 @@
+[submodule "submodules/LinAlgf90"]
+	path = submodules/LinAlgf90
+	url = https://github.com/Takayuki-Miyagi/LinAlgf90.git
+[submodule "submodules/NdSpline"]
+	path = submodules/NdSpline
+	url = https://github.com/Takayuki-Miyagi/NdSpline.git

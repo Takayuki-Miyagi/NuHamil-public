@@ -1,0 +1,3 @@
+module ThreeBodyJacobiSpace
+  use ThreeBodyJacobiSpaceIso
+end module ThreeBodyJacobiSpace

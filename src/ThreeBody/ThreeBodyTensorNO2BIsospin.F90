@@ -1,0 +1,5 @@
+module ThreeBodyTensorNO2BIsospin
+  use ThreeBodyTensorNO2BIsospinHalf
+  use ThreeBodyTensorNO2BIsospinSingle
+  use ThreeBodyTensorNO2BIsospinDouble
+end module ThreeBodyTensorNO2BIsospin
