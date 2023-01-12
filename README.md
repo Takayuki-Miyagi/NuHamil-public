@@ -1,5 +1,7 @@
 # NuHamil
 
+[![DOI](https://zenodo.org/badge/534840092.svg)](https://zenodo.org/badge/latestdoi/534840092)
+
 <img align="center" width="120" height="100" src="https://github.com/Takayuki-Miyagi/NuHamil/blob/master/LogoNuHamil.png">
 
 This code is to generate the nucleon-nucleon (NN) and three-nucleon (3N) matrix elements.
