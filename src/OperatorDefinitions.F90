@@ -2466,8 +2466,8 @@ contains
     if(n_par==0) return
     allocate(par_names(n_par), par_vals(n_par))
     do i = 1, n_par
-      par_names= strings(2*i)
-      par_vals = strings(2*i+1)
+      par_names(i) = strings(2*i)
+      par_vals(i) = strings(2*i+1)
     end do
     deallocate(strings)
   end subroutine parse_opname
