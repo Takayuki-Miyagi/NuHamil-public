@@ -10,7 +10,7 @@ from collections import OrderedDict
 import time
 
 HOME=os.path.expanduser("~")
-path_to_nninput = f"{HOME}/NuHamil/input_nn_files" # this is default; please modify here if you did not download the code in your home directory.
+path_to_nninput = f"{HOME}/NuHamil-public/input_nn_files" # this is default; please modify here if you did not download the code in your home directory.
 exe_file = 'NuHamil.exe'
 n_nodes=1               # Basically, you can use mpi, but if there is no NNrel file, it will stop. I recommend you to try without mpi for a first run.
 n_omp_threads=48        # threads per node
