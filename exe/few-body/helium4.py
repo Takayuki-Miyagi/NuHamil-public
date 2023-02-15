@@ -9,7 +9,7 @@ from collections import OrderedDict
 import time, itertools
 
 HOME=os.path.expanduser("~")
-path_to_nninput = f"{HOME}/NuHamil/input_nn_files" # this is default; please modify here if you did not download the code in your home directory.
+path_to_nninput = f"{HOME}/NuHamil-public/input_nn_files" # this is default; please modify here if you did not download the code in your home directory.
 exe_file = 'NuHamil.exe'
 n_omp_threads=48        # threads per node
 mem = "125G"            # memory per node
