@@ -9,7 +9,7 @@ from collections import OrderedDict
 import time
 
 HOME=os.path.expanduser("~")
-path_to_nninput = f"{HOME}/NuHamil/input_nn_files" # this is default; please modify here if you did not download the code in your home directory.
+path_to_nninput = f"{HOME}/NuHamil-public/input_nn_files" # this is default; please modify here if you did not download the code in your home directory.
 exe_file = 'NuHamil.exe'
 operators = "hamil,Mmoment_IA,Qmoment_IA,Radius"
 NNF = 'N3LO_EM500'
