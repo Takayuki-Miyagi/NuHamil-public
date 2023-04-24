@@ -240,6 +240,7 @@ contains
 
       select case(oprtr%val)
       case('hamil', 'Hamil')
+        write(*,'(a18)') "Energy"
         write(*,'(f18.8)') ket_energies%v(1)
 
       case("EDM")
@@ -255,6 +256,7 @@ contains
           return
         end if
         vals0= calc_dipole_polarizability_isospin(params, ket_energies%v(1), ket_states%m(:,1))
+        write(*,'(2a18)') "Energy", "alphaD"
         write(*,'(2f18.8)') ket_energies%v(1), vals0
 
       case("TDM")
@@ -267,7 +269,10 @@ contains
       case("Rm2")
         vals = calc_expectation_val_isospin(s%str("R2"), params, bra_states, ket_states)
         vals = vals / dble(A**2)
+        write(*,'(a16,6a18)') "Operator", "Energy bra", "Energy ket", "<Op (bare)>", &
+            & "<Op (2b ev)>", "<Op (3b ev)>"
         write(*,'(a16,5f18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), vals(:)
+        write(*,*)
 
       case("Rp2")
         vals0 = calc_expectation_val_isospin(s%str("R2"), params, bra_states, ket_states)
@@ -275,7 +280,10 @@ contains
         vals0 = vals0 * dble(N) / dble(Z*A**2)
         vals1 = vals1 * geometry_part(tbra,2,tket,zbra,0,zket)*geometry_part(jbra,0,jket,jbra,0,jket) / dble(2*A*Z)
         vals = vals0 - vals1
+        write(*,'(a16,6a18)') "Operator", "Energy bra", "Energy ket", "<Op (bare)>", &
+            & "<Op (2b ev)>", "<Op (3b ev)>"
         write(*,'(a16,5f18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), vals(:)
+        write(*,*)
 
       case("Rn2")
         vals0 = calc_expectation_val_isospin(s%str("R2"), params, bra_states, ket_states)
@@ -283,7 +291,10 @@ contains
         vals0 = vals0 * dble(Z) / dble(N*A**2)
         vals1 = vals1 * geometry_part(tbra,2,tket,zbra,0,zket)*geometry_part(jbra,0,jket,jbra,0,jket) / dble(2*A*N)
         vals = vals0 + vals1
+        write(*,'(a16,6a18)') "Operator", "Energy bra", "Energy ket", "<Op (bare)>", &
+            & "<Op (2b ev)>", "<Op (3b ev)>"
         write(*,'(a16,5f18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), vals(:)
+        write(*,*)
 
       case("Mmoment_IA")
         vals0 = calc_expectation_val_isospin(s%str("M1_S_IS"), params, bra_states, ket_states)
@@ -300,7 +311,10 @@ contains
         vals2 = vals2 * sqrt(4.d0*pi/3.d0)
         vals3 = vals3 * sqrt(4.d0*pi/3.d0) * (-1.d0)
         vals = vals0 + vals1 + vals2 + vals3
+        write(*,'(a16,6a18)') "Operator", "Energy bra", "Energy ket", "<Op (bare)>", &
+            & "<Op (2b ev)>", "<Op (3b ev)>"
         write(*,'(a16,5f18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), vals(:)
+        write(*,*)
 
       case("Qmoment_IA")
         vals0 = calc_expectation_val_isospin(s%str("E2_IS"), params, bra_states, ket_states)
@@ -309,7 +323,10 @@ contains
         vals1 = vals1 * geometry_part(tbra,2,tket,zbra,0,zket)*geometry_part(jbra,4,jket,jbra,0,jket) / dble(2*A)
         vals = vals0 - vals1
         vals = vals * sqrt(16.d0 * pi/5.d0)
+        write(*,'(a16,6a18)') "Operator", "Energy bra", "Energy ket", "<Op (bare)>", &
+            & "<Op (2b ev)>", "<Op (3b ev)>"
         write(*,'(a16,5f18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), vals(:)
+        write(*,*)
 
       case("Mmoment_2B")
         vals = calc_expectation_val_isospin(s%str("M1_2BC_intr"), params, bra_states, ket_states)
@@ -318,23 +335,13 @@ contains
         vals = vals * sqrt(4.d0 * pi/3.d0)
         val = val * geometry_part(tbra,2,tket,zbra,0,zket) * geometry_part(jbra,2,jket,jbra,0,jket)
         val = val * sqrt(4.d0 * pi/3.d0)
-        write(*,'(a16,5f18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), vals(:)
-        write(*,'(a16,3f18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), val
+        write(*,'(a16,6a18)') "Operator", "Energy bra", "Energy ket", "<Op (bare)>", &
+            & "<Op (2b ev)>", "<Op (3b ev)>"
+        write(*,'(a16,5f18.8)') "M1_2BC_intr",bra_energies%v(1), ket_energies%v(1), vals(:)
+        write(*,'(a16,3a18)') "Operator", "Energy bra", "Energy ket", "<Op (bare)>"
+        write(*,'(a16,3f18.8)') "M1_2BC_Sachs",bra_energies%v(1), ket_energies%v(1), val
+        write(*,*)
 
-      case("Mmoment_full")
-        vals0 = calc_expectation_val_isospin(s%str("M1_S_IS"), params, bra_states, ket_states)
-        vals1 = calc_expectation_val_isospin(s%str("M1_S_IV"), params, bra_states, ket_states)
-        vals2 = calc_expectation_val_isospin(s%str("M1_L_IS"), params, bra_states, ket_states)
-        vals3 = calc_expectation_val_isospin(s%str("M1_L_IV"), params, bra_states, ket_states)
-        vals4 = calc_expectation_val_isospin(s%str("M1_2BC_intr"), params, bra_states, ket_states)
-        vals0 = vals0 * geometry_part(tbra,0,tket,zbra,0,zket) * geometry_part(jbra,2,jket,jbra,0,jket) / dble(A-1)
-        vals1 = vals1 * geometry_part(tbra,2,tket,zbra,0,zket) * geometry_part(jbra,2,jket,jbra,0,jket) / dble(A-1)
-        vals2 = vals2 * geometry_part(tbra,0,tket,zbra,0,zket) * geometry_part(jbra,2,jket,jbra,0,jket) * dble(2*N) / dble(A)**2
-        vals3 = vals3 * geometry_part(tbra,2,tket,zbra,0,zket) * geometry_part(jbra,2,jket,jbra,0,jket) / dble(A)
-        vals4 = vals4 * geometry_part(tbra,2,tket,zbra,0,zket) * geometry_part(jbra,2,jket,jbra,0,jket)
-        vals = vals0 + vals1 + vals2 - vals3 + vals4
-        vals = vals * sqrt(4.d0 * pi/3.d0)
-        write(*,'(a16,5f18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), vals(:)
       case("BetaDecay")
         if(s%find(params%Regulator, s%str("NonLocal"))) then
           tmp = "AxialV_T1-N2LO-" + params%Regulator + s%str(params%RegulatorPower) + "-" + s%str(params%lambda_3nf_nonlocal)
@@ -350,6 +357,7 @@ contains
         write(*,'(a16,5f18.8)') "<|| Fermi ||>: ",bra_energies%v(1), ket_energies%v(1), vals0(:)
         write(*,'(a16,5f18.8)') "<|| GT ||>: ",bra_energies%v(1), ket_energies%v(1), vals1(:)
         write(*,'(a16,5f18.8)') "<|| A(2BC) ||>: ",bra_energies%v(1), ket_energies%v(1), vals2(:)
+        write(*,*)
 
 
       case default
