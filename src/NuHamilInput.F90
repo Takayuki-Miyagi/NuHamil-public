@@ -1,3 +1,95 @@
+!
+! List of input parameters on Apr. 12, 2023.
+!
+! rank: integer, particle number.
+! hw: real, HO frequency parameter in the unit of MeV.
+! renorm: character, how to renormalize interactions. One can choose 'bare', 'srg', or 'vlowk'.
+! lambda: real, renormalization scale parameter in the unit of fm-1.
+! N2max: integer, Nmax truncation for the NN, i.e., max(2n+l).
+! jmax2: integer, maximum total angular momentum in the two-body relative coordinate.
+! NMesh2: integer, number of mesh points used in the relative NN calculations.
+! pmax2: real, maxium momentum of the mesh points in the unit of fm-1
+! NNInt: character, name of the NN interaction. This is just used as a tag.
+! trans2lab: logical, do the Talmi-Moshinsky transformation if it is true.
+! N3max: integer, Nmax truncation for the 3N, i.e., max(2n12+l12+2n3+l3).
+! jmax3: integer, maxium total angular momentum in the three-body Jacobi coordinate.
+! LECs: real, 5d array, [c1, c3, c4, cD, cE] used for the N2LO 3N interaction.
+! path_to_tmp_dir: character, path to the temporary files.
+! lambda_3nf_local: real, cutoff for the local regulator in the unit of MeV.
+! lambda_3nf_nonlocal: real, cutoff for the non-local regulator in the unit of MeV.
+! snt_mass: integer, mass number for the snt file.
+! genuine_3bf: logical, add a bare 3N interaction if it is true.
+! NAmax: integer, Nmax truncation for A-body systems.
+! renorm_space2: character, specifying a space, where the renormalization is done. One can choose 'mom' or 'ho'.
+! hw_target: real, target frequency for the frequency conversion.
+! NN_only: logical, ignore all 3N interactions if it is true.
+! Operators: character, operators one wants to compute.
+! coul: logical, add coulomb interaction if it is true.
+! ramp: character, specifying 3N SRG space. See the function 'GetRampNmax' in 'src/ThreeBody/ThreeBodyJacobiSpaceIso.F90'
+! bra: integer, 4d array, [J, Parity, T, Tz] used for few-body calculations for the bra state.
+! ket: integer, 4d array, [J, Parity, T, Tz] used for few-body calculations for the ket state.
+! pn_form: logical, this is just a dummy.
+! emax: integer, emax truncation in the Laboratory frame.
+! e2max: integer, e2max truncation in the Laboratory frame.
+! e3max: integer, e3max truncation in the Laboratory frame.
+! J12max: integer, maximum angular momentum in the bare 3N interaction, for relative motion of particles 1 and 2 for 3N systems.
+! Regulator: character, type of regulator function
+! NNNInt: character, 3N interaction name, just a tag.
+! RegulatorPower: integer, power used in regulator functions.
+! Ngrid_3nf: integer, number of mesh points used for the 3N momentum-space interpolation.
+! nblock: integer, used for some optimization of 3N Talmi-Moshinsky transformation.
+! is_PhaseShift: logical, calculate NN scattering phase shifts if it is true.
+! file_convert: logical, convert the file format if it is true.
+! file_name_nn_original: character, input NN Laboratory frame file.
+! file_name_3n_original: character, input 3N Laboratory frame file.
+! file_name_nn_converted: character, output NN Laboratory frame file.
+! file_name_3n_converted: character, output 3N Laboratory frame file.
+! lmax: integer, lmax truncation for the Laboratory frame.
+! test_mode: logical, enter a user defined test mode if it is true.
+! save_3nf_before_lec: logical, save the 3N Jacobi matrix elements for each topology if it is true.
+! only_hf_monopole: logical, calculate only the 3N matrix elements relevant to HF calculations if it is true.
+! only_no2b_elments: logical, calculate only the 3N matrix elements relevant to NO2B operators if it is true.
+! count_memory: logical, enter a mode estimating the resulting file if it is true.
+! file_name_nn: character, NN output file name.
+! file_name_3n: character, 3N output file name.
+! j3max_initial_3nf: integer, maximum total angular momentum for genuine 3N interactions in the 3N Jacobi coordinate.
+! averaged_file_for_test: character, file name for each Nmax block in 3N Jacobi coordinate.
+! srg_generator: character, type of SRG generator.
+! J2max_NNint: integer, maximum angular momentum for NN interactions in the NN relative coordinate.
+! no2b_channel_begin: integer, start channel number for NO2B matrix element calculations.
+! no2b_channel_end: integer, end channel number for NO2B matrix element calculations.
+! no2b_temp_dir: character, path to locate the temporary files for NO2B matrix element calculations.
+! emax_convert: integer, emax for the converted file
+! e2max_convert: integer, e2max for the converted file
+! e3max_convert: integer, e3max for the converted file
+! lmax_convert: integer, lmax for the converted file
+! NNrel_op_input: character, file name for input NN operator in the realtive coordinate.
+! NNrel_op_output: character, file name for output NN operator in the realtive coordinate.
+! n_threads_tcoef: integer, number of OpenMP threads used in the 3N T-coefficient calculatioins.
+! file_nn_cartesian: character, output file name for the NN interaction in the cartesian coordinate.
+! evolve_coulomb: logical, evolve NN + coulomb interaction if it is true.
+! Nmax_srg_edge: integer, used for the SRG flow with Neumann boundary.
+! spin_tensor_decomposition: integer, spin rank for the spin tensor decomposition.
+! files_combined: character, file names that you want to combine.
+! weights_combined: character, weightss that you want to use for the combined files.
+! lab_3bme_precision: character, precision of 3N matrix elements. One can choose 'half', 'single', or 'double'.
+! path_to_NNrel: character, path to dump NN interaction file in the relative coordinate.
+! path_to_hebeler_files: character: path to Kai's HDF files.
+! fname_jacobi_op_for_trans2lab: character, file name of the operator in the 3N Jacobi coordinate that you want to transform.
+! file_name_n: character, file name for one-body operators.
+! svd_rank_tcoef: integer, rank for singuar value decomposition for T-coefficients.
+! svd_rank_operator: integer, rank for singlar value decomposition for operator matrices.
+! svd_rank_op_lab: integer, rank for singlar value decomposition for operator matrices in the Laboratory frame.
+! file_name_phase_shift: character, output file name for the NN phase shift analysis.
+! Tlab_phase_shift: character, energies for NN phase shift analysis.
+! J2maxLab: integer, maximum two-body total angular momentum in the Laboratory frame.
+! Lcm2Max: integer, maximum two-body angular momentum in the CM motion.
+! pn_same_mass: logical, neglect proton-neutron mass difference among channels, if it is true.
+! fn_fewbody_wave_function: character, output file name for the wave function of few-body calculations.
+! input_nn_file: character, input file name of NN interaction in the relative momentum space.
+! Hebeler_fn_header: character, some keywords for Kai's files.
+! Hebeler_fn_tails: character, some keywords for Kai's files.
+!
 module NuHamilInput
   use ClassSys
   implicit none
@@ -47,11 +139,6 @@ module NuHamilInput
     type(str) :: averaged_file_for_test
     logical :: evolve_coulomb
     integer :: spin_tensor_decomposition
-    real(8) :: LECs_DeltaGO394(17) ! Used if NNint='DeltaGO394_***'
-    character(7) :: LECs_names_DeltaGO394(17) = &
-        &["Ct1S0pp", "Ct1S0np", "Ct1S0nn", "Ct3S1  ", "C1S0   ", &
-        & "C3P0   ", "C1P1   ", "C3P1   ", "C3S1   ", "CE1    ", &
-        & "C3P2   ", "c1     ", "c2     ", "c3     ", "c4     ", "cD     ", "cE     " ]
 
 
     ! three-body system
@@ -165,7 +252,6 @@ contains
     integer :: J12max = -1 ! truncation for genuine three-body force
     real(8) :: hw_target = -1.d0
     real(8) :: LECs(5) = [0.d0, 0.d0, 0.d0, 0.d0, 0.d0]
-    real(8) :: LECs_DeltaGO394(17) = [0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0]
     real(8) :: lambda_3nf_local = 400.d0
     real(8) :: lambda_3nf_nonlocal = 500.d0
     character(256) :: Regulator = 'Local'
@@ -249,7 +335,7 @@ contains
         & no2b_channel_begin, no2b_channel_end, no2b_temp_dir, &
         & emax_convert, e2max_convert, e3max_convert, lmax_convert, &
         & NNrel_op_input, NNrel_op_output, n_threads_tcoef, file_nn_cartesian, evolve_coulomb, Nmax_srg_edge, &
-        & spin_tensor_decomposition, LECs_DeltaGO394, files_combined, weights_combined, &
+        & spin_tensor_decomposition, files_combined, weights_combined, &
         & lab_3bme_precision, path_to_NNrel, path_to_hebeler_files, fname_jacobi_op_for_trans2lab, file_name_n, &
         & svd_rank_tcoef, svd_rank_operator, svd_rank_op_lab, &
         & file_name_phase_shift, Tlab_phase_shift, J2maxLab, Lcm2Max, pn_same_mass, fn_fewbody_wave_function, &
@@ -296,7 +382,6 @@ contains
     params%NNrel_op_output = NNrel_op_output
     params%evolve_coulomb = evolve_coulomb
     params%spin_tensor_decomposition = spin_tensor_decomposition
-    params%LECs_DeltaGO394 = LECs_DeltaGO394
 
     params%N3max = N3max
     params%J12max = J12max
@@ -360,6 +445,7 @@ contains
     params%svd_rank_op_lab = svd_rank_op_lab
     params%fn_fewbody_wave_function = fn_fewbody_wave_function
     params%input_nn_file = input_nn_file
+
 
     params%file_nn_cartesian = file_nn_cartesian
     if(params%lmax==-1) params%lmax = params%emax
@@ -513,7 +599,6 @@ contains
     params2%path_to_NNrel = params1%path_to_NNrel
     params2%path_to_hebeler_files = params1%path_to_hebeler_files
     params2%file_nn_cartesian = params1%file_nn_cartesian
-    params2%LECs_DeltaGO394 = params1%LECs_DeltaGO394
     params2%lab_3bme_precision = params1%lab_3bme_precision
     params2%fname_jacobi_op_for_trans2lab = params1%fname_jacobi_op_for_trans2lab
     params2%n_threads_tcoef = params1%n_threads_tcoef
