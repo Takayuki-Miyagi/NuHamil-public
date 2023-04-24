@@ -1649,7 +1649,7 @@ contains
       end do
       close(wunit)
     end if
-    
+
     if(sy%find(fn, sy%str('.bin'))) then
       two => this%ms
       open(wunit, file=fn%val, form='unformatted', access='stream')
@@ -1697,13 +1697,13 @@ contains
     call two%SetMeshWeight(pmesh, wmesh)
     do ich = 1, nchan_read
       read(runit) j, p, s, z, ndim
+      idx = two%GetIndex(j,p,s,z)
       allocate(tmp(ndim,ndim))
       read(runit) tmp(:,:)
-      if(j > two%GetJmax()) then
+      if(j > two%GetJmax() .or. idx==0) then
         deallocate(tmp)
         cycle
       end if
-      idx = two%GetIndex(j,p,s,z)
       this%MatCh(idx)%m(:,:) = tmp(:,:)
       deallocate(tmp)
     end do
@@ -1745,7 +1745,6 @@ contains
     end do
     close(wunit)
   end subroutine write_nn_ho
-
 end module NNForce
 
 !program test
