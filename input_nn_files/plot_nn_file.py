@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# python3 plot_nn_file.py MOMENTUM_SPACE_FILE
 import os, sys
 import matplotlib.pyplot as plt
 import numpy as np
