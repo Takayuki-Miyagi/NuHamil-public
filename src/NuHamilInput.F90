@@ -87,6 +87,7 @@
 ! pn_same_mass: logical, neglect proton-neutron mass difference among channels, if it is true.
 ! fn_fewbody_wave_function: character, output file name for the wave function of few-body calculations.
 ! input_nn_file: character, input file name of NN interaction in the relative momentum space.
+! output_nn_file: character, output file name of NN interaction in the relative momentum space.
 ! Hebeler_fn_header: character, some keywords for Kai's files.
 ! Hebeler_fn_tails: character, some keywords for Kai's files.
 !
@@ -129,6 +130,7 @@ module NuHamilInput
     type(str), allocatable :: Hebeler_fn_tails(:)
     type(str) :: fname_jacobi_op_for_trans2lab
     type(str) :: input_nn_file
+    type(str) :: output_nn_file
     logical :: coul
     logical :: trans2lab
     logical :: pn_same_mass
@@ -289,6 +291,7 @@ contains
     character(512) :: NNrel_op_input = "none"
     character(512) :: NNrel_op_output = "none"
     character(512) :: input_nn_file = 'none'
+    character(512) :: output_nn_file = 'none'
     integer :: emax_convert=-1, e2max_convert=-1, e3max_convert=-1, lmax_convert=-1
     character(2048) :: files_combined = ""
     character(1024) :: weights_combined = "none"
@@ -339,7 +342,7 @@ contains
         & lab_3bme_precision, path_to_NNrel, path_to_hebeler_files, fname_jacobi_op_for_trans2lab, file_name_n, &
         & svd_rank_tcoef, svd_rank_operator, svd_rank_op_lab, &
         & file_name_phase_shift, Tlab_phase_shift, J2maxLab, Lcm2Max, pn_same_mass, fn_fewbody_wave_function, &
-        & input_nn_file, Hebeler_fn_head, Hebeler_fn_tails
+        & input_nn_file, output_nn_file, Hebeler_fn_head, Hebeler_fn_tails
 
 
     call getarg(1, inputfile)
@@ -445,6 +448,7 @@ contains
     params%svd_rank_op_lab = svd_rank_op_lab
     params%fn_fewbody_wave_function = fn_fewbody_wave_function
     params%input_nn_file = input_nn_file
+    params%output_nn_file = output_nn_file
 
 
     params%file_nn_cartesian = file_nn_cartesian
@@ -609,6 +613,7 @@ contains
     params2%file_name_phase_shift = params1%file_name_phase_shift
     params2%fn_fewbody_wave_function = params1%fn_fewbody_wave_function
     params2%input_nn_file = params1%input_nn_file
+    params2%output_nn_file = params1%output_nn_file
     params2%Hebeler_fn_head = params1%Hebeler_fn_head
     if(allocated(params2%Hebeler_fn_tails)) deallocate(params2%Hebeler_fn_tails)
     allocate(params2%Hebeler_fn_tails(size(params1%Hebeler_fn_tails)))

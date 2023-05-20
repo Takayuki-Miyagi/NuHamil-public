@@ -57,6 +57,12 @@ contains
       return
     end if
 
+    if( input%output_nn_file%val /= "none" ) then
+      call nn_srg_analysis(input)
+      return
+    end if
+
+
     if(input%trans2lab) then
 
       call manage_trans_to_lab(input)
@@ -1220,4 +1226,22 @@ contains
     call rel_for_trans%fin()
     call rel2lab%fin()
   end function get_operator_in_lab_frame
+
+  subroutine nn_srg_analysis(params)
+    use TwoBodyRelativeSpace
+    use NNForce, only: NNForceHO
+    type(InputParameters), intent(in) :: params
+    type(TwoBodyRelSpaceSpinHOBasis) :: rel
+    type(NNForceHO) :: vnn, U
+    call rel%init(params%hw, params%N2max, params%J2max_NNint)
+    call vnn%init(rel)
+    call U%init(rel)
+
+    call vnn%setNNForceHO(U, params, fn=params%output_nn_file)
+
+    call vnn%fin()
+    call U%fin()
+    call rel%fin()
+  end subroutine nn_srg_analysis
+
 end module TwoBodyManager
