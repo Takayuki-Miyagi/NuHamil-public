@@ -107,10 +107,13 @@ Unfortunately, non-locally regulated 3N interaction cannot be fully suppported.
 Feel free to contact me (miyagi@theorie.ikp.physik.tu-darmstadt.de) if you are interested in such interactions.
 I can provide the HO 3N matrix element files in the Jacobi coordinate or in the laboratory frame.
 
+# How to cite
+If you use this code in your research, please cite [T. Miyagi, Eur. Phys. J. A 59, 150 (2023)](https://link.springer.com/article/10.1140/epja/s10050-023-01039-y).
+
 
 # Acknowledgement
 **NuHamil** code is greatly inspired by the **manyeff** code by P.Navratil and **VRenormalize** in Computational Environment for Nuclear Structure (CENS) project (https://github.com/ManyBodyPhysics/CENS).
-The code uses VODE library (https://www.radford.edu/~thompson/vodef90web/).
+The code uses VODE library by G.D.Byrne and S.Thompson.
 I thank P.Navratil, N.Shimizu, and N.Tsunoda for the discussions, optimizations, and parallelizations.
 I also thank P.Arthuis, A.Belly, M.Heinz, B.S.Hu, S.R.Stroberg, and A.Tichai for testing the code and useful feedback.
 
