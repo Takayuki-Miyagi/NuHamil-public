@@ -1,5 +1,5 @@
 !
-! This is for an independent test of the two-body multipole operators. 
+! This is for an independent test of the two-body multipole operators.
 ! Do not use.
 !
 module VectorQ0
@@ -241,7 +241,7 @@ contains
 
     if(this%ch_order < 1) return
     do i = 1, this%GetNMesh()
-      v(i) = v(i) + 0.25d0 * g_A**2 / f_pi**2 * fq%pi_prop(i) 
+      v(i) = v(i) + 0.25d0 * g_A**2 / f_pi**2 * fq%pi_prop(i)
     end do
     if(this%ch_order < 2) return
   end subroutine qdep_term_seagull

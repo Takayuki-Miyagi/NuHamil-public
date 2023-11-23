@@ -78,67 +78,31 @@ contains
     use SingleParticleState
     use TwoBodyLabSpacePN
     use TwoBodyTransCoef, only: TransRel2LabSpace
+    use TwoBodyLabOps
     type(InputParameters), intent(in) :: params
     type(Orbits) :: sps
     type(TwoBodyLabPNSpace) :: lab
     type(TransRel2LabSpace) :: rel2lab
+    type(TwoBodyLabOp) :: oplab
     type(sys) :: s
+    type(str) :: filename
     integer :: i
+    logical :: ex
 
     if(params%count_memory) then
       call count_memory_2bme(params)
       return
     end if
 
+    call sps%init(params%emax, params%lmax)
+    call lab%init(params%hw, sps, params%e2max, params%snt_mass)
+    call rel2lab%init(lab, params%e2max, params%Jmax2)
+    write(*,"(a,f12.6,a)") "Estimated memory for two-body Tcoefs: ", rel2lab%GetMemory(), " GB"
+
+
     do i = 1, size(params%Operators)
-      if(s%find(params%Operators(i), s%str("L5_2B")) .or. &
-          & s%find(params%Operators(i), s%str("Tel5_2B")) .or. &
-          & s%find(params%Operators(i), s%str("Tmag5_2B")) .or. &
-          & s%find(params%Operators(i), s%str("L_2B")) .or. &
-          & s%find(params%Operators(i), s%str("Tel_2B")) .or. &
-          & s%find(params%Operators(i), s%str("Tmag_2B")) .or. &
-          & s%find(params%Operators(i), s%str("M1_2BC_Sachs"))) then
-          call trans_to_lab_relcm_op(params%Operators(i))
-          cycle
-      end if
 
-      select case(params%Operators(i)%val)
-      case("Hcm","hcm")
-        if(params%renorm%val/="bare") then
-          write(*,*) "Only bare", params%Operators(i)%val
-          stop
-        end if
-        call cm_operator(params%Operators(i))
-      case default
-        call trans_to_lab_op(params%Operators(i))
-      end select
-    end do
-
-    call rel2lab%fin()
-    call lab%fin()
-    call sps%fin()
-
-  contains
-    subroutine trans_to_lab_op(oprtr)
-      use TwoBodyRelativeSpace
-      use NNForce, only: NNForceHO
-      use TwoBodyRelOps
-      use TwoBodyLabOps
-      type(str), intent(in) :: oprtr
-      type(TwoBodyRelSpaceHOBasis) :: rel, rel_for_trans
-      type(TwoBodyRelSpaceSpinHOBasis) :: relspin
-      type(NNForceHO) :: vnnspin, Uspin
-      type(TwoBodyRelOp) :: vnn, U, oprel, optmp
-      type(TwoBodyLabOp) :: oplab
-      type(InputParameters) :: input
-      type(str) :: filename
-      type(sys) :: s
-      logical :: ex
-
-
-      if(.not. sps%is_Constructed) call sps%init(params%emax, params%lmax)
-      if(.not. lab%is_Constructed) call lab%init(params%hw, sps, params%e2max, params%snt_mass)
-      call oplab%init(lab,oprtr)
+      call oplab%init(lab,params%Operators(i))
 
       filename = oplab%GetFile(params%file_name_nn, &
           & params%NNInt, params%renorm, params%lambda, params%hw, &
@@ -148,16 +112,52 @@ contains
       inquire(file=filename%val, exist=ex)
       if(ex) then
         call oplab%fin()
-        call lab%fin()
-        call sps%fin()
         write(*,'(2a)') trim(filename%val), ' already exists.'
-        return
+        cycle
       end if
 
-      if(.not. rel2lab%is_Constructed) then
-        call rel2lab%init(lab, params%e2max, params%Jmax2)
-        write(*,"(a,f12.6,a)") "Estimated memory for two-body Tcoefs: ", rel2lab%GetMemory(), " GB"
+      if(s%find(params%Operators(i), s%str("L5_2B")) .or. &
+          & s%find(params%Operators(i), s%str("Tel5_2B")) .or. &
+          & s%find(params%Operators(i), s%str("Tmag5_2B")) .or. &
+          & s%find(params%Operators(i), s%str("L_2B")) .or. &
+          & s%find(params%Operators(i), s%str("Tel_2B")) .or. &
+          & s%find(params%Operators(i), s%str("Tmag_2B")) .or. &
+          & s%find(params%Operators(i), s%str("M1_2BC_Sachs")) .or. &
+          & params%Operators(i)%val == "M1_2BC" &
+          & ) then
+        call trans_to_lab_relcm_op(params%Operators(i), oplab)
+      else
+        call trans_to_lab_op(params%Operators(i), oplab)
       end if
+
+      if(s%find(oplab%GetOpName(), s%str("HCM"))) call oplab%ReducedToNonReduced()
+      if(params%svd_rank_op_lab/=-1) call oplab%SVD(params%svd_rank_op_lab)
+      if(params%averaged_file_for_test%val == "none" ) then
+        call oplab%writef(filename)
+      else
+        call oplab%writef(filename, params%averaged_file_for_test)
+      end if
+      call oplab%fin()
+    end do
+
+    call rel2lab%fin()
+    call lab%fin()
+    call sps%fin()
+
+  contains
+    subroutine trans_to_lab_op(oprtr, op_lab)
+      use TwoBodyRelativeSpace
+      use NNForce, only: NNForceHO
+      use TwoBodyRelOps
+      type(str), intent(in) :: oprtr
+      type(TwoBodyLabOp), intent(inout) :: op_lab
+      type(TwoBodyRelSpaceHOBasis) :: rel, rel_for_trans
+      type(TwoBodyRelSpaceSpinHOBasis) :: relspin
+      type(NNForceHO) :: vnnspin, Uspin
+      type(TwoBodyRelOp) :: vnn, U, oprel, optmp
+      type(InputParameters) :: input
+      type(sys) :: s
+      logical :: ex
 
       call relspin%init(params%hw, params%N2max, params%J2max_NNint)
       call vnnspin%init(relspin)
@@ -220,106 +220,118 @@ contains
         end select
       end if
 
-      call oplab%TMtrans(rel2lab,oprel)
-      if(params%svd_rank_op_lab/=-1) call oplab%SVD(params%svd_rank_op_lab)
-      if(params%averaged_file_for_test%val == "none" ) then
-        call oplab%writef(filename)
-      else
-        call oplab%writef(filename, params%averaged_file_for_test)
-      end if
-
+      call op_lab%TMtrans(rel2lab,oprel)
       call oprel%fin()
-      call oplab%fin()
       call rel_for_trans%fin()
     end subroutine trans_to_lab_op
 
-    subroutine trans_to_lab_relcm_op(oprtr)
+    subroutine trans_to_lab_relcm_op(opname, op_lab)
       use MyLibrary, only: gauss_legendre, gv, m_nucleon
+      use OperatorDefinitions, only: parse_operator_string
       use TwoBodyRelativeSpace
       use TwoBodyRelOps
       use TwoBodyRelCMOps
-      use TwoBodyLabOps
       use TwoBodyMultiPoleOperator
-      type(str), intent(in) :: oprtr
-      type(TwoBodyRelCMSpaceHOBasis) :: relcm_ho
+      use NNForce, only: NNForceHO
+      type(str), intent(in) :: opname
+      type(TwoBodyLabOp), intent(inout) :: op_lab
+      type(TwoBodyRelCMSpaceHOBasis) :: relcm_ho, relcm_srg
       type(TwoBodyRelCMSpaceMBasis) :: relcm_mom
       type(TwoBOdyRelCMOp) :: oprelcm, tmp
-      type(TwoBodyLabOp) :: oplab
+      type(TwoBodyRelOp) :: oprel
       real(8), allocatable :: x(:), w(:)
       type(TwoBodyMultiPoleOp) :: mltop_2b
-      real(8) :: c6
-      integer :: J2maxLab, Lcm2Max
-
+      real(8) :: c6, lam
+      integer :: J2maxLab, Lcm2Max, ch_order, reg_pow
       type(str) :: filename
       logical :: ex
       type(sys) :: s
-
-
-      if(.not. sps%is_Constructed) call sps%init(params%emax, params%lmax)
-      if(.not. lab%is_Constructed) call lab%init(params%hw, sps, params%e2max, params%snt_mass)
-      call oplab%init(lab,oprtr)
-
-      filename = oplab%GetFile(params%file_name_nn, &
-          & params%NNInt, params%renorm, params%lambda, params%hw, &
-          & params%emax, params%e2max, params%coul, &
-          & params%snt_mass)
+      type(TwoBodyRelSpaceHOBasis) :: rel
+      type(TwoBodyRelSpaceSpinHOBasis) :: relspin
+      type(NNForceHO) :: vnnspin, Uspin
+      type(TwoBodyRelOp) :: vnn, U
+      type(str) :: op_string, regulator
 
       J2maxLab = 2*params%e2max+1
       Lcm2max = 2*params%e2max
       if(params%J2maxLab /= -1) J2maxLab = params%J2maxLab
       if(params%Lcm2max /= -1) Lcm2Max = params%Lcm2max
 
-      call relcm_ho%init(params%hw, params%e2max, J2maxLab, params%e2max, params%jmax2, LcmMax=Lcm2Max)
-      call oprelcm%init(relcm_ho, oprtr)
+      if(params%renorm%val == 'bare') then
+        call relcm_ho%init(params%hw, params%e2max, J2maxLab, params%e2max, params%jmax2, LcmMax=Lcm2Max)
+        call oprelcm%init(relcm_ho, opname)
+      else
+        call relcm_ho%init(params%hw, params%e2max, J2maxLab, params%e2max, params%jmax2, LcmMax=Lcm2Max)
+        call relcm_srg%init(params%hw, params%N2max, J2maxLab, params%N2max, params%jmax2, LcmMax=Lcm2Max, NcmMax=params%e2max)
+        call oprelcm%init(relcm_srg, opname)
+      end if
       write(*,'(a,f10.6,a)') 'Memory estimation for rel-cm operator: ', oprelcm%GetMemory()*2.d0, ' GB'
 
-      if(s%find(params%Operators(i), s%str("L5_2B")) .or. &
-          & s%find(params%Operators(i), s%str("Tel5_2B")) .or. &
-          & s%find(params%Operators(i), s%str("Tmag5_2B"))) then
+      if( s%find(opname, s%str("M5_2B")) .or. &
+          & s%find(opname, s%str("L5_2B")) .or. &
+          & s%find(opname, s%str("Tel5_2B")) .or. &
+          & s%find(opname, s%str("Tmag5_2B"))) then
 
-        call relcm_mom%init(0.d0, params%pmax2, params%NMesh2, 0.d0, params%pmax2, params%NMesh2, &
+        if(s%find(opname, s%str("M5_2B"))) op_string="M5_2B"
+        if(s%find(opname, s%str("L5_2B"))) op_string="L5_2B"
+        if(s%find(opname, s%str("Tel5_2B"))) op_string="Tel5_2B"
+        if(s%find(opname, s%str("Tmag5_2B"))) op_string="Tmag5_2B"
+        op_string = op_string + "_J" + s%str(oprelcm%GetOpJ()) + "_Tz" + s%str(oprelcm%GetOpZ()) + "_Q" + s%str(oprelcm%GetQ())
+        call parse_operator_string(opname, op_string, ch_order, regulator, reg_pow, lam)
+
+        call relcm_mom%init(0.d0, params%pmax2, params%NMeshMultipole, 0.d0, params%pmax2, params%NMeshMultipole, &
             & J2maxLab, params%jmax2, Lcm_Max=Lcm2Max)
-        call gauss_legendre(0.d0, params%pmax2, x, w, params%NMesh2)
+        call gauss_legendre(0.d0, params%pmax2, x, w, params%NMeshMultipole)
         call relcm_mom%SetMeshWeight(x, w, x, w)
 
         c6 = gv / m_nucleon * 1.d3
-        c6 = 0.d0
-        call mltop_2b%init(oprelcm, relcm_mom, c1=params%c1, c3=params%c3, c4=params%c4, c6=c6, cD=params%cD)
-        call tmp%init(relcm_ho, oprtr)
+        call mltop_2b%init(oprelcm, relcm_mom, c1=params%c1, c3=params%c3, c4=params%c4, c6=c6, cD=params%cD, verbose=.true., &
+            & ch_order=ch_order, regulator=regulator, reg_pow=reg_pow, lambda=lam)
+        call tmp%init(relcm_ho, opname)
         call mltop_2b%SetHOMatrix(tmp, s%str('c1'))
         oprelcm = tmp
         call tmp%fin()
 
-        call tmp%init(relcm_ho, oprtr)
+        call tmp%init(relcm_ho, opname)
         call mltop_2b%SetHOMatrix(tmp, s%str('c3'))
         oprelcm = oprelcm + tmp
         call tmp%fin()
 
-        call tmp%init(relcm_ho, oprtr)
+        call tmp%init(relcm_ho, opname)
         call mltop_2b%SetHOMatrix(tmp, s%str('c4'))
         oprelcm = oprelcm + tmp
         call tmp%fin()
 
-        call tmp%init(relcm_ho, oprtr)
+        call tmp%init(relcm_ho, opname)
         call mltop_2b%SetHOMatrix(tmp, s%str('cD'))
         oprelcm = oprelcm + tmp
         call tmp%fin()
 
-        call tmp%init(relcm_ho, oprtr)
+        call tmp%init(relcm_ho, opname)
         call mltop_2b%SetHOMatrix(tmp, s%str('c6'))
         oprelcm = oprelcm + tmp
         call tmp%fin()
         call mltop_2b%fin()
         call relcm_mom%fin()
-      else if(s%find(params%Operators(i), s%str("L_2B")) .or. &
+      else if( s%find(params%Operators(i), s%str("M_2B")) .or. &
+          & s%find(params%Operators(i), s%str("L_2B")) .or. &
           & s%find(params%Operators(i), s%str("Tel_2B")) .or. &
           & s%find(params%Operators(i), s%str("Tmag_2B"))) then
-        call relcm_mom%init(0.d0, params%pmax2, params%NMesh2, 0.d0, params%pmax2, params%NMesh2, &
+
+        if(s%find(opname, s%str("M_2B"))) op_string="M_2B"
+        if(s%find(opname, s%str("L_2B"))) op_string="L_2B"
+        if(s%find(opname, s%str("Tel_2B"))) op_string="Tel_2B"
+        if(s%find(opname, s%str("Tmag_2B"))) op_string="Tmag_2B"
+        op_string = op_string + "_J" + s%str(oprelcm%GetOpJ()) + "_Tz" + s%str(oprelcm%GetOpZ()) + "_Q" + s%str(oprelcm%GetQ())
+        call parse_operator_string(opname, op_string, ch_order, regulator, reg_pow, lam)
+
+        call relcm_mom%init(0.d0, params%pmax2, params%NMeshMultipole, 0.d0, params%pmax2, params%NMeshMultipole, &
             & J2maxLab, params%jmax2, Lcm_Max=Lcm2Max)
-        call gauss_legendre(0.d0, params%pmax2, x, w, params%NMesh2)
+        call gauss_legendre(0.d0, params%pmax2, x, w, params%NMeshMultipole)
         call relcm_mom%SetMeshWeight(x, w, x, w)
 
-        call mltop_2b%init(oprelcm, relcm_mom, c1=params%c1, c3=params%c3, c4=params%c4, c6=c6, cD=params%cD)
+        call mltop_2b%init(oprelcm, relcm_mom, c1=params%c1, c3=params%c3, c4=params%c4, c6=c6, cD=params%cD, verbose=.true., &
+            & ch_order=ch_order, regulator=regulator, reg_pow=reg_pow, lambda=lam)
         call mltop_2b%SetHOMatrix(oprelcm, s%str(''))
 
         call mltop_2b%fin()
@@ -336,31 +348,33 @@ contains
         write(*,"(a,f12.6,a)") "Estimated memory for two-body Tcoefs: ", rel2lab%GetMemory(), " GB"
       end if
 
-      call oplab%TMtrans(rel2lab,oprelcm)
-      call oplab%writef(filename)
+      if(params%renorm%val /= 'bare') then
+        ! Get unitary transformation
+        call relspin%init(params%hw, params%N2max, params%J2max_NNint)
+        call vnnspin%init(relspin)
+        call Uspin%init(relspin)
+        call vnnspin%setNNForceHO(Uspin, params)
+        call rel%init(params%hw, params%N2max, params%Jmax2)
+        call vnn%init(rel,rel,s%str('hamil'),params%pn_same_mass)
+        call U%init(rel,rel,s%str('UT'),params%pn_same_mass)
+        call vnn%SetTwoBodyScalarSpinBreaking(vnnspin)
+        call U%SetTwoBodyScalarSpinBreaking(Uspin)
+        call vnnspin%fin()
+        call Uspin%fin()
+        call relspin%fin()
 
+        call oprelcm%evolve(U)
+        tmp = oprelcm%truncate(relcm_ho)
+        oprelcm = tmp
+        call vnn%fin()
+        call U%fin()
+        call rel%fin()
+      end if
+
+      call op_lab%TMtrans(rel2lab,oprelcm)
       call oprelcm%fin()
       call relcm_ho%fin()
-      call oplab%fin()
     end subroutine trans_to_lab_relcm_op
-
-    subroutine cm_operator(opname)
-      use TwoBodyLabOps
-      type(str), intent(in) :: opname
-      type(TwoBodyLabOp) :: op
-      type(str) :: filename
-      if(.not. sps%is_Constructed) call sps%init(params%emax, params%lmax)
-      if(.not. lab%is_Constructed) call lab%init(params%hw, sps, params%e2max, params%snt_mass)
-      call op%init(lab,opname)
-
-      filename = op%GetFile(params%file_name_nn, &
-          & params%NNInt, params%renorm, params%lambda, params%hw, &
-          & params%emax, params%e2max, params%coul, &
-          & params%snt_mass)
-      call set_two_body_hcm(op)
-      call op%writef(filename)
-      call op%fin()
-    end subroutine cm_operator
   end subroutine manage_trans_to_lab
 
   subroutine TMtransformation_from_file(params)

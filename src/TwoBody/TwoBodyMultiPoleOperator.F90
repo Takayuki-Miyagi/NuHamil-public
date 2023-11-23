@@ -22,7 +22,7 @@ module TwoBodyMultiPoleOperator
     type(TwoBodyRelCMSpaceMBasis), pointer :: ms_mom => null()
     type(TwoBodyRelCMSpaceHOBasis), pointer :: ms_ho => null()
     type(str) :: OpName, external_field
-    integer :: rankJ, rankP, rankZ
+    integer :: rankJ, rankP, rankZ, ch_order
     logical :: Qdependent_mesh = .true.
     real(8) :: c1, c2, c3, c4, c6, cD ! LECs
     real(8) :: Q ! momentum transfer
@@ -35,6 +35,13 @@ module TwoBodyMultiPoleOperator
     generic :: init => InitTwoBodyMultiPoleOp
     generic :: fin => FinTwoBodyMultiPoleOp
   end type TwoBodyMultiPoleOp
+
+  type :: Regulator
+    logical :: reg_non_local = .false., reg_local = .false.
+    integer :: reg_pow
+    real(8) :: lambda
+  end type Regulator
+  type(Regulator) :: freg
 
   type :: Ystore_q
     real(8), allocatable :: y(:,:,:)
@@ -77,8 +84,8 @@ module TwoBodyMultiPoleOperator
 
   type :: PWD_functions
     real(8) :: c1, c3, c4, c6, cD
-    integer :: NZMesh = 20
-    integer :: NQMesh = 20
+    integer :: NZMesh = 40
+    integer :: NQMesh = 40
     integer :: NMesh_rel = 0
     integer :: NMesh_cm = 0
     integer :: NMeshMom = 0
@@ -142,18 +149,23 @@ module TwoBodyMultiPoleOperator
   end type OpLScoupled
   type(OpLScoupled), target :: opls
   real(8), allocatable :: coef_y_exp(:,:) ! sqrt[(2K)! / (2k1)! (2(K-k1))!]
+  real(8), private :: kcmmin, kcmmax, krelmin, krelmax
+
 
 contains
 
-  subroutine InitTwoBodyMultiPoleOp(this, op, relcm_mom, c1, c3, c4, c6, cD, NZMesh, NQMesh, verbose)
-    use MyLibrary, only: gamma_function
+  subroutine InitTwoBodyMultiPoleOp(this, op, relcm_mom, c1, c3, c4, c6, cD, NZMesh, NQMesh, verbose, &
+        & ch_order, regulator, reg_pow, lambda)
+    use MyLibrary, only: gamma_function, hc
     class(TwoBodyMultiPoleOp), intent(inout) :: this
     type(TwoBodyRelCMOp), intent(in), target :: op
     type(TwoBodyRelCMSpaceMBasis), intent(in), target :: relcm_mom
     real(8), intent(in) :: c1, c3, c4, c6, cD
-    integer, intent(in), optional :: NZMesh, NQMesh
+    integer, intent(in), optional :: NZMesh, NQMesh, ch_order, reg_pow
     logical, intent(in), optional :: verbose
-    logical :: verb 
+    type(str), intent(in), optional :: regulator
+    real(8), intent(in), optional :: lambda
+    logical :: verb
     integer :: K, k1, k2
     type(sys) :: s
     this%OpName = op%GetOpName()
@@ -168,9 +180,16 @@ contains
     this%rankJ = op%GetOpJ()
     this%rankP = op%GetOpP()
     this%rankZ = op%GetOpZ()
-    if(s%find(this%OpName,    s%str('L5_2B'))) this%external_field='axial_vector'
-    if(s%find(this%OpName,  s%str('Tel5_2B'))) this%external_field='axial_vector'
-    if(s%find(this%OpName, s%str('Tmag5_2B'))) this%external_field='axial_vector'
+    this%ch_order = 0
+    freg%reg_pow = 2
+    freg%lambda = 500.d0
+    freg%reg_non_local = .false.
+    freg%reg_local = .false.
+    if(s%find(this%OpName,    s%str('M5_2B'))) this%external_field='axial charge'
+    if(s%find(this%OpName,    s%str('L5_2B'))) this%external_field='axial vector'
+    if(s%find(this%OpName,  s%str('Tel5_2B'))) this%external_field='axial vector'
+    if(s%find(this%OpName, s%str('Tmag5_2B'))) this%external_field='axial vector'
+    if(s%find(this%OpName,     s%str('M_2B'))) this%external_field='charge'
     if(s%find(this%OpName,     s%str('L_2B'))) this%external_field='vector'
     if(s%find(this%OpName,   s%str('Tel_2B'))) this%external_field='vector'
     if(s%find(this%OpName,  s%str('Tmag_2B'))) this%external_field='vector'
@@ -178,6 +197,13 @@ contains
     if(present(NQMesh)) this%NQMesh = NQMesh
     verb = .false.
     if(present(verbose)) verb = verbose
+    if(present(ch_order)) this%ch_order = ch_order
+    if(present(regulator)) then
+      if(regulator%val == "NonLocal") freg%reg_non_local = .true.
+      if(regulator%val == "Local") freg%reg_local = .true.
+    end if
+    if(present(reg_pow)) freg%reg_pow = reg_pow
+    if(present(lambda)) freg%lambda = lambda
     if(verb) call this%show_options()
     call PWD%init(relcm_mom, op%ms%GetNmax(), this%NZMesh, this%NQMesh, this%rankJ, this%Q, &
         & this%c1, this%c3, this%c4, this%c6, this%cD, this%external_field, this%Qdependent_mesh, verb)
@@ -194,10 +220,23 @@ contains
     class(TwoBodyMultiPoleOp), intent(in) :: this
     write(*,"(a,f8.2,a)") "# Calculation options for 2b multipole operator @ Q=", this%Q, " MeV"
     write(*,"(2a)") "# Operator: ", trim(this%OpName%val)
-    !write(*,"(a,i3)") "# Order of chiral expansion: ", this%ch_order
+    write(*,"(a,i3)") "# Order of chiral expansion: ", this%ch_order
     write(*,"(a,f8.4,a,f8.4,a,f8.4,a,f8.4,a)") "# c1= ", this%c1, " GeV-1, c2= ", &
       & this%c2, " GeV-1, c3=", this%c3, " GeV-1, c4= ", this%c4, " GeV-1"
-    write(*,"(a,f8.4,a,f8.4)") "# c6= ", this%c6, ", cD= ", this%cD
+    write(*,"(a,f8.4,a,f8.4)") "# c6= ", this%c6, ", cd= ", this%cd
+    write(*,"(a)") "#"
+    write(*,"(a)") "# Truncations: "
+    write(*,"(a,i4,a,i4)") "# NMesh (rel) = ", this%ms_mom%GetNMeshRel(), ", NMesh (cm) = ", this%ms_mom%GetNMeshCM()
+    write(*,"(a,f8.4,a,f8.4,a)") "# pmin = ", this%ms_mom%GetPrelMin(), " fm-1, pmax = ", this%ms_mom%GetPrelMax(), " fm-1"
+    write(*,"(a,f8.4,a,f8.4,a)") "# Pmin = ", this%ms_mom%GetPcmMin(), " fm-1, Pmax = ", this%ms_mom%GetPcmMax(), " fm-1"
+    write(*,"(a,i4,a,i4)") "# NMesh for theta = ", this%NZMesh, ", NMesh for q = ", this%NQMesh
+    write(*,"(a,i4,a,i4,a,i4)") "# Nmax (tot) = ", this%ms_ho%GetNMax(), ", Nmax (rel) = ", this%ms_ho%GetNmaxRel(), &
+        & ", Nmax (cm) = ", this%ms_ho%GetNmaxCM()
+    write(*,"(a,i4,a,i4,a,i4)") "# Jmax (tot) = ", this%ms_mom%GetJmax(), ", Jmax (rel) = ", this%ms_mom%GetJrelMax(), &
+        & ", Lcm max = ", this%ms_mom%GetLcmMax()
+    if(freg%reg_local) write(*,"(a,f8.4,a,i4)") "# Local regulator: Lambda= ", freg%lambda, " MeV, n= ", freg%reg_pow
+    if(freg%reg_non_local) write(*,"(a,f8.4,a,i4)") "# Non-local regulator: Lambda= ", freg%lambda, " MeV, n= ", freg%reg_pow
+    write(*,"(a)") "#"
   end subroutine show_options
 
   subroutine FinTwoBodyMultiPoleOp(this)
@@ -222,14 +261,20 @@ contains
     integer, intent(in) :: Jbra, Jket, Zbra, Zket
     integer :: lcm_bra, lrel_bra, s_bra, Lt_bra
     integer :: lcm_ket, lrel_ket, s_ket, Lt_ket
+    real(8) :: phase
     type(DMat) :: res
 
     lcm_bra = chbra%Lcm; lrel_bra = chbra%Lrel; Lt_bra = chbra%Ltot; s_bra = chbra%spin
     lcm_ket = chket%Lcm; lrel_ket = chket%Lrel; Lt_ket = chket%Ltot; s_ket = chket%spin
-
+    phase = 1.d0
+    if(mod(abs(lrel_bra+lcm_bra-lrel_ket-lcm_ket+this%rankJ),2)==0) &
+        & phase = (-1.d0)**((lrel_bra+lcm_bra-lrel_ket-lcm_ket+this%rankJ)/2)
+    if(mod(abs(lrel_bra+lcm_bra-lrel_ket-lcm_ket+this%rankJ),2)==1) &
+        & phase = (-1.d0)**((lrel_bra+lcm_bra-lrel_ket-lcm_ket+this%rankJ-1)/2) ! in unit of i
+    phase = (-1.d0)**((lrel_ket+lcm_ket-lrel_bra-lcm_bra)/2) * (-1.d0)**(pwd%rankJ/2)
     call res%ini(chbra%n_states, chket%n_states)
     res = func(this%rankJ, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket)
-    res = res * (-1.d0)**((lrel_ket+lcm_ket-lrel_bra-lcm_bra)/2) * (-1.d0)**(pwd%rankJ/2) * hc**6
+    res = res * phase * hc**6
   end function set_momentum_matrix
 
   subroutine SetHOMatrix(this, op, term)
@@ -259,6 +304,28 @@ contains
 
     opname = this%OpName
     f_ptr => null()
+    if(this%ch_order < 1) then
+      write(*,*) "There is no contribution at LO!"
+      return
+    end if
+    if(this%external_field%val=='vector') then
+      if(this%ch_order > 2) write(*,*) "N3LO vector current is not implemented!"
+    end if
+    if(this%external_field%val=='axial vector') then
+      if(this%ch_order < 2) then
+        write(*,*) "There is no axial vector contribution at NLO!"
+        return
+       end if
+      if(this%ch_order > 2) write(*,*) "N3LO vector current is not implemented!"
+    end if
+    if(this%external_field%val=='charge') then
+      if(this%ch_order > 2) write(*,*) "N3LO charge is not implemented!"
+      return
+    end if
+    if(this%external_field%val=='axial charge') then
+      write(*,*) "Any axial charge operator is not implemented!"
+      return
+    end if
     if(s%find(opname, s%str('L5_2B')) .and. s%find(term, s%str('c1'))) f_ptr => L_axial_vector_n2lo_c1
     if(s%find(opname, s%str('L5_2B')) .and. s%find(term, s%str('c3'))) f_ptr => L_axial_vector_n2lo_c3
     if(s%find(opname, s%str('Tel5_2B')) .and. s%find(term, s%str('c3'))) f_ptr => Tel_axial_vector_n2lo_c3
@@ -276,6 +343,8 @@ contains
     if(s%find(opname, s%str('Tmag_2B'))) f_ptr => Tmag_vector_nlo
     if(s%find(opname, s%str('PIFTmag_2B'))) f_ptr => Tmag_vector_nlo_pion_in_flight
     if(s%find(opname, s%str('SGTmag_2B'))) f_ptr => Tmag_vector_nlo_seagull
+    if(s%find(opname, s%str('PIFTel_2B'))) f_ptr => Tel_vector_nlo_pion_in_flight
+    if(s%find(opname, s%str('SGTel_2B'))) f_ptr => Tel_vector_nlo_seagull
 
     do ichbra = 1, op%ms%GetNumberChannels()
       do ichket = 1, ichbra
@@ -317,6 +386,7 @@ contains
     time = omp_get_wtime()
     time_set_mat = 0.d0
     time_mom2ho = 0.d0
+
     !$omp parallel
     !$omp do private(iloop, ichbra, ichket, ichbra_ls, ichket_ls, Jbra, Jket, Zbra, Zket, &
     !$omp & bra_ho, ket_ho, chbra_ls, chket_ls, mat) schedule(dynamic)
@@ -333,13 +403,15 @@ contains
       ket_ho => ms_ho_ls%jpz(ichket)%Lcm_lrel_Ltot_spin(ichket_ls)
       call init_lscoupled_channel_mom(chbra_ls, bra_ho%Lcm, bra_ho%lrel, bra_ho%Ltot, bra_ho%spin)
       call init_lscoupled_channel_mom(chket_ls, ket_ho%Lcm, ket_ho%lrel, ket_ho%Ltot, ket_ho%spin)
-      !t1 = omp_get_wtime()
+      t1 = omp_get_wtime()
       mat = set_momentum_matrix(this, f_ptr, chbra_ls, chket_ls, Jbra, Jket, Zbra, Zket)
-      !time_set_mat = time_set_mat + omp_get_wtime()-t1
-      !t1 = omp_get_wtime()
+      time_set_mat = time_set_mat + omp_get_wtime()-t1
+      t1 = omp_get_wtime()
       call transform_to_ho_ls_channel(opls%OpCh(ichbra,ichket)%MatCh(ichbra_ls,ichket_ls), bra_ho, ket_ho, &
           & mat, chbra_ls, chket_ls, Zbra, Zket, op%ms%GetFrequency())
-      !time_mom2ho = time_mom2ho + omp_get_wtime()-t1
+      !call transform_to_ho_ls_channel_old(opls%OpCh(ichbra,ichket)%MatCh(ichbra_ls,ichket_ls), bra_ho, ket_ho, &
+      !    & mat, chbra_ls, chket_ls, Zbra, Zket, op%ms%GetFrequency())
+      time_mom2ho = time_mom2ho + omp_get_wtime()-t1
       opls%OpCh(ichket,ichbra)%MatCh(ichket_ls,ichbra_ls) = &
           & opls%OpCh(ichbra,ichket)%MatCh(ichbra_ls,ichket_ls)%T() * (-1.d0)**(Jbra-Jket)
 
@@ -348,9 +420,10 @@ contains
     end do
     !$omp end do
     !$omp end parallel
-    !call timer%add(s%str('Mom. 2b multipole operator'), time_set_mat)
-    !call timer%add(s%str('Mom -> HO 2b multipole operator'), time_mom2ho)
-    call timer%add(s%str('ls coupled op in 2b multipole operator'), omp_get_wtime()-time)
+
+    call timer%add(s%str('Mom. 2b multipole operator'), time_set_mat)
+    call timer%add(s%str('Mom -> HO 2b multipole operator'), time_mom2ho)
+    !call timer%add(s%str('ls coupled op in 2b multipole operator'), omp_get_wtime()-time)
     deallocate(iloops)
 
     time = omp_get_wtime()
@@ -425,6 +498,199 @@ contains
   end subroutine ls_2_jj
 
   subroutine transform_to_ho_ls_channel(mat_ho, bra_ho, ket_ho, mat_mom, bra_mom, ket_mom, Zbra, Zket, hw)
+    use MyLibrary, only: hc, m_proton, m_neutron, ho_radial_wf_norm, gauss_legendre
+    use NdSpline
+    type(Dmat), intent(inout) :: mat_ho
+    type(LSCoupledRadial), intent(in) :: bra_ho, ket_ho
+    type(DMat), intent(in) :: mat_mom
+    type(LSCoupledRadial), intent(in) :: bra_mom, ket_mom
+    integer, intent(in) :: Zbra, Zket
+    real(8), intent(in) :: hw
+    integer :: ibra_ho, iket_ho, ibra_mom, iket_mom
+    integer :: nrel_bra, lrel_bra, nrel_ket, lrel_ket, ncm_bra, lcm_bra, ncm_ket, lcm_ket
+    integer :: irel_bra, irel_ket, icm_bra, icm_ket, i
+    real(8) :: me, mrel_bra, mrel_ket, mcm_bra, mcm_ket, arel_bra, arel_ket, acm_bra, acm_ket
+    real(8) :: time, norm
+    type(sys) :: s
+    real(8), allocatable :: radial_rel1(:,:), radial_rel2(:,:), radial_cm1(:,:), radial_cm2(:,:)
+    type(spline) :: sp
+    integer, parameter :: k = 4
+    integer, parameter :: NMesh = 80
+    logical, parameter :: extrap_near_edge = .true.
+    real(8) :: integral
+    real(8), allocatable :: tmp1d(:), kcm_mesh(:), wcm_mesh(:), krel_mesh(:), wrel_mesh(:)
+    real(8), allocatable :: Bcm(:,:), Brel(:,:), Mat_mid(:,:,:,:), Mat(:,:,:), tmp3d(:,:,:)
+    real(8), allocatable :: work1(:,:,:), work2(:,:,:)
+
+    time = omp_get_wtime()
+    mrel_bra = (m_proton*m_neutron)/(m_proton+m_neutron)
+    mcm_bra = m_proton + m_neutron
+    mrel_ket = (m_proton*m_neutron)/(m_proton+m_neutron)
+    mcm_ket = m_proton + m_neutron
+    arel_bra = hc**2 / (mrel_bra*hw)
+    arel_ket = hc**2 / (mrel_ket*hw)
+    acm_bra =  hc**2 / (mcm_bra *hw)
+    acm_ket =  hc**2 / (mcm_ket *hw)
+
+    lcm_bra = bra_ho%lcm
+    lrel_bra = bra_ho%lrel
+    lcm_ket = ket_ho%lcm
+    lrel_ket = ket_ho%lrel
+
+    norm = 0.d0
+    do ibra_mom = 1, pwd%NMeshMom
+      do iket_mom = 1, pwd%NMeshMom
+        norm = norm + mat_mom%m(ibra_mom, iket_mom)**2
+      end do
+    end do
+    if(sqrt(norm) < 1.d-24) return
+
+    allocate(radial_cm2(pwd%NMesh_cm, 0:maxval(ket_ho%Ncm)))
+    allocate(Mat_mid(pwd%NMesh_rel, pwd%NMesh_cm, pwd%NMesh_rel, 0:maxval(ket_ho%Ncm)))
+    allocate(tmp1d(pwd%NMesh_cm), kcm_mesh(NMesh), wcm_mesh(NMesh))
+    ! This part is expensive. Optimize here
+    do icm_bra = 1, pwd%NMesh_cm
+
+      call gauss_legendre(abs(pwd%cm_mom_array(icm_bra)%pp-pwd%Q), pwd%cm_mom_array(icm_bra)%pp+pwd%Q, &
+        & kcm_mesh, wcm_mesh, NMesh)
+      tmp1d(:) = 0.d0
+      call sp%init([k], [pwd%NMesh_cm], pwd%cm_mom_array(icm_bra)%p, tmp1d, extrapolation=extrap_near_edge)
+      Bcm = sp%Get_Bmatrix(1,kcm_mesh)
+      call sp%fin()
+      radial_cm2(:,:) = 0.d0
+      do ncm_ket = 0, maxval(ket_ho%Ncm)
+        do i = 1, NMesh
+          integral = ho_radial_wf_norm(ncm_ket, lcm_ket, acm_ket, kcm_mesh(i)/hc) * (-1.d0)**ncm_ket * &
+            & kcm_mesh(i) * wcm_mesh(i) / hc**2
+          do icm_ket = 1, pwd%NMesh_cm
+            radial_cm2(icm_ket, ncm_ket) = radial_cm2(icm_ket, ncm_ket) + integral * Bcm(icm_ket, i)
+          end do
+        end do
+      end do
+
+      do irel_bra = 1, pwd%NMesh_rel
+        do irel_ket = 1, pwd%NMesh_rel
+          do icm_ket = 1, pwd%NMesh_cm
+            ibra_mom = pwd%icm_irel_to_idx(icm_bra,irel_bra)
+            iket_mom = pwd%icm_irel_to_idx(icm_ket,irel_ket)
+            tmp1d(icm_ket) = mat_mom%m(ibra_mom, iket_mom)
+          end do
+          call sp%init([k], [pwd%NMesh_cm], pwd%cm_mom_array(icm_bra)%p, tmp1d, extrapolation=extrap_near_edge)
+          tmp1d = sp%get_coefs()
+          call sp%fin()
+          Mat_mid(irel_bra, icm_bra, irel_ket, :) = matmul(tmp1d, radial_cm2)
+        end do
+      end do
+    end do
+    deallocate(tmp1d, kcm_mesh, wcm_mesh)
+
+    allocate(radial_rel1(pwd%NMesh_rel, 0:maxval(bra_ho%Nrel)))
+    allocate(radial_rel2(pwd%NMesh_rel, 0:maxval(ket_ho%Nrel)))
+    allocate(radial_cm1(pwd%NMesh_cm, 0:maxval(bra_ho%Ncm)))
+    allocate(tmp1d(pwd%NMesh_rel*pwd%NMesh_cm*pwd%NMesh_rel))
+    allocate(tmp3d(pwd%NMesh_rel,pwd%NMesh_cm,pwd%NMesh_rel))
+    allocate(work1(0:maxval(bra_ho%Nrel), pwd%NMesh_cm, pwd%NMesh_rel))
+    allocate(work2(0:maxval(bra_ho%Nrel), 0:maxval(bra_ho%Ncm),pwd%NMesh_rel))
+    allocate(Mat(0:maxval(bra_ho%Nrel), 0:maxval(bra_ho%Ncm), 0:maxval(ket_ho%Nrel)))
+    call gauss_legendre(kcmmin, kcmmax, kcm_mesh, wcm_mesh, NMesh)
+    call gauss_legendre(krelmin, krelmax, krel_mesh, wrel_mesh, NMesh)
+    tmp1d(:) = 0.d0
+    call sp%init([k,k,k], [pwd%NMesh_rel, pwd%NMesh_cm, pwd%NMesh_rel], &
+      & [pwd%rel_mom_array, pwd%cm_mom_array(:)%pp, pwd%rel_mom_array], tmp1d, extrapolation=extrap_near_edge)
+    Bcm = sp%Get_Bmatrix(1,kcm_mesh)
+    Brel = sp%Get_Bmatrix(2,krel_mesh)
+    call sp%fin()
+
+    radial_cm1(:,:) = 0.d0
+    do ncm_bra = 0, maxval(bra_ho%Ncm)
+      do i = 1, NMesh
+        integral = ho_radial_wf_norm(ncm_bra, lcm_bra, acm_bra, kcm_mesh(i)/hc) * (-1.d0)**ncm_bra * &
+          & kcm_mesh(i) * wcm_mesh(i) /hc**2
+        do icm_bra = 1, pwd%NMesh_cm
+          radial_cm1(icm_bra, ncm_bra) = radial_cm1(icm_bra, ncm_bra) + integral * Bcm(icm_bra,i)
+        end do
+      end do
+    end do
+
+    radial_rel1(:,:) = 0.d0
+    do nrel_bra = 0, maxval(bra_ho%Nrel)
+      do i = 1, NMesh
+        integral = ho_radial_wf_norm(nrel_bra, lrel_bra, arel_bra, krel_mesh(i)/hc) * (-1.d0)**nrel_bra * &
+            & krel_mesh(i) * wrel_mesh(i) /hc**2
+        if(freg%reg_non_local) integral = integral * regulator_function(krel_mesh(i))
+        do irel_bra = 1, pwd%NMesh_rel
+          radial_rel1(irel_bra, nrel_bra) = radial_rel1(irel_bra, nrel_bra) + integral * Brel(irel_bra,i)
+        end do
+      end do
+    end do
+
+    radial_rel2(:,:) = 0.d0
+    do nrel_ket = 0, maxval(ket_ho%Nrel)
+      do i = 1, NMesh
+        integral = ho_radial_wf_norm(nrel_ket, lrel_ket, arel_ket, krel_mesh(i)/hc) * (-1.d0)**nrel_ket * &
+            & krel_mesh(i) * wrel_mesh(i) /hc**2
+        if(freg%reg_non_local) integral = integral * regulator_function(krel_mesh(i))
+        do irel_ket = 1, pwd%NMesh_rel
+          radial_rel2(irel_ket, nrel_ket) = radial_rel2(irel_ket, nrel_ket) + integral * Brel(irel_ket,i)
+        end do
+      end do
+    end do
+
+    do ncm_ket = 0, maxval(ket_ho%Ncm)
+      tmp1d = reshape(Mat_mid(:,:,:,ncm_ket), shape(tmp1d))
+      call sp%init([k,k,k], [pwd%NMesh_rel,pwd%NMesh_cm,pwd%NMesh_rel], &
+        & [pwd%rel_mom_array, pwd%cm_mom_array(:)%pp, pwd%rel_mom_array], tmp1d, extrapolation=extrap_near_edge)
+      tmp3d = reshape(sp%get_coefs(), shape(tmp3d))
+      call sp%fin()
+
+      do nrel_bra = 0, maxval(bra_ho%Nrel)
+        do icm_bra = 1, pwd%NMesh_cm
+          do irel_ket = 1, pwd%NMesh_rel
+            work1(nrel_bra,icm_bra,irel_ket) = dot_product(radial_rel1(:,nrel_bra),tmp3d(:,icm_bra,irel_ket))
+          end do
+        end do
+      end do
+
+      do nrel_bra = 0, maxval(bra_ho%Nrel)
+        do ncm_bra = 0, maxval(bra_ho%Ncm)
+          do irel_ket = 1, pwd%NMesh_rel
+            work2(nrel_bra,ncm_bra,irel_ket) = dot_product(radial_cm1(:,ncm_bra),work1(nrel_bra,:,irel_ket))
+          end do
+        end do
+      end do
+
+      do nrel_bra = 0, maxval(bra_ho%Nrel)
+        do ncm_bra = 0, maxval(bra_ho%Ncm)
+          do nrel_ket = 0, maxval(ket_ho%Nrel)
+            Mat(nrel_bra,ncm_bra,nrel_ket) = dot_product(radial_rel2(:,nrel_ket),work2(nrel_bra,ncm_bra,:))
+          end do
+        end do
+      end do
+
+      do ncm_bra = 0, maxval(bra_ho%Ncm)
+        do nrel_ket = 0, maxval(ket_ho%Nrel)
+          do nrel_bra = 0, maxval(bra_ho%Nrel)
+            ibra_ho = bra_ho%Ncm_nrel2idx(Ncm_bra,Nrel_bra)
+            iket_ho = ket_ho%Ncm_nrel2idx(Ncm_ket,Nrel_ket)
+            if(ibra_ho * iket_ho < 1) cycle
+            mat_ho%m(ibra_ho,iket_ho) = Mat(nrel_bra,ncm_bra,nrel_ket)
+          end do
+        end do
+      end do
+    end do
+
+    deallocate(tmp1d)
+    deallocate(tmp3d)
+    deallocate(work1)
+    deallocate(work2)
+    deallocate(Mat)
+    deallocate(radial_rel1)
+    deallocate(radial_rel2)
+    deallocate(radial_cm1)
+    deallocate(radial_cm2)
+  end subroutine transform_to_ho_ls_channel
+
+  subroutine transform_to_ho_ls_channel_old(mat_ho, bra_ho, ket_ho, mat_mom, bra_mom, ket_mom, Zbra, Zket, hw)
     use MyLibrary, only: hc, m_proton, m_neutron, ho_radial_wf_norm
     type(Dmat), intent(inout) :: mat_ho
     type(LSCoupledRadial), intent(in) :: bra_ho, ket_ho
@@ -519,7 +785,7 @@ contains
     deallocate(radial_cm1)
     deallocate(radial_cm2)
     !call timer%add(s%str('mom -> ho 2b multipole operator'), omp_get_wtime()-time)
-  end subroutine transform_to_ho_ls_channel
+  end subroutine transform_to_ho_ls_channel_old
 
   subroutine InitPWDFiniteQ(this, ms, Nmax, NZMesh, NQMesh, rankJ, Q, c1, c3, c4, c6, cD, external_field, Qdependent_mesh, verbose)
     use MyLibrary, only: legendre_polynomial, gauss_legendre, hc
@@ -593,6 +859,14 @@ contains
       this%cm_mom_array(i)%W(:) = w_tmp
       deallocate(q_tmp, w_tmp)
     end do
+    !kcmmin = ms%GetPcmMin() * hc
+    !kcmmax = ms%GetPcmMax() * hc
+    !krelmin = ms%GetPrelMin() * hc
+    !krelmax = ms%GetPrelMax() * hc
+    kcmmin = minval(this%cm_mom_array(:)%pp)
+    kcmmax = maxval(this%cm_mom_array(:)%pp)
+    krelmin = minval(this%rel_mom_array)
+    krelmax = maxval(this%rel_mom_array)
 
     allocate(this%Ystore_cm(0:LcmMax,0:LcmMax))
     do l1 = 0, LcmMax
@@ -601,7 +875,7 @@ contains
         call this%Ystore_cm(l1,l2)%init_ystore_lam(l1,l2,Q)
       end do
     end do
-    if(external_field%val=="axial_vector") call store_axial_vector_integrals(Q, LrelMax, AlphaMax, NZMesh, NQMesh, this%NMesh_rel)
+    if(external_field%val=="axial vector") call store_axial_vector_integrals(Q, LrelMax, AlphaMax, NZMesh, NQMesh, this%NMesh_rel)
     if(external_field%val=="vector") call store_vector_integrals(Q, LrelMax, AlphaMax, NZMesh, NQMesh, this%NMesh_rel)
     this%stored=.true.
     this%time_pwd = 0.d0
@@ -1410,84 +1684,217 @@ contains
     use MyLibrary, only: dcg, sjs, snj, tau1_iso, tau2_iso, pi, m_pi, g_A, f_pi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
+    real(8) :: fact, fk1, fn, ff, tau1, tau2
+    real(8), allocatable :: f_k1(:,:), f_N(:,:)
     type(DMat) :: res
+    integer :: lam, k1, k2, N
+
+    tau1 = tau1_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
+    tau2 = tau2_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
+    fact = (-2.d0 * PWD%c1 * 1.d-3 * g_A * m_pi**2 / f_pi**2) / (PWD%Q**2 + m_pi**2) / (4.d0 * pi) / (2.d0*pi)**3
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
   end function L_axial_vector_n2lo_c1
 
   function L_axial_vector_n2lo_c3(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, gamma_function, tau1_iso, tau2_iso, pi, m_pi, g_A, f_pi
+    use MyLibrary, only: dcg, sjs, snj, tau1_iso, tau2_iso, pi, g_A, f_pi, m_pi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: fact
+    real(8) :: tau1, tau2
+
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    fact = -(PWD%c3 * 1.d-3 * g_A / f_pi**2) / sqrt(4.d0 * pi) / (2.d0*pi)**3
+    fact = fact * (1.d0 - PWD%Q**2/(PWD%Q**2 + m_pi**2))
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1)))
+    res = func_axial_vector_n2lo_c3(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) * sqrt(dble((kappa+1)*(2*kappa+3))) * (-1.d0)
+    if(kappa > 0) then
+      res = res + func_axial_vector_n2lo_c3(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+          & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) * sqrt(dble(kappa*(2*kappa-1)))
+    end if
+    res = res * fact
   end function L_axial_vector_n2lo_c3
 
   function Tel_axial_vector_n2lo_c3(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, tau1_iso, tau2_iso, pi, g_A, f_pi
+    use MyLibrary, only: tau1_iso, tau2_iso, pi, g_A, f_pi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: ff, fkn, fk1, fx, fact
+    real(8), allocatable :: f_kn(:,:), f_k1(:,:), f_x(:,:)
+    integer :: lam, K, N, k1, k2, X
+    real(8) :: tau1, tau2
+
+    tau1 = tau1_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
+    tau2 = tau2_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    if(abs(tau1*tau2) < 1.d-16) return
+
+    fact = -(PWD%c3 * 1.d-3 * g_A / f_pi**2) / sqrt(4.d0 * pi) / (2.d0*pi)**3
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1)))
+    res = func_axial_vector_n2lo_c3(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) * sqrt(dble(kappa*(2*kappa+3)))
+    if(kappa > 0) then
+      res = res + func_axial_vector_n2lo_c3(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+          & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) * sqrt(dble((kappa+1)*(2*kappa-1)))
+    end if
+    res = res * fact
   end function Tel_axial_vector_n2lo_c3
 
   function Tmag_axial_vector_n2lo_c3(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, tau1_iso, tau2_iso, pi, g_A, f_pi
+    use MyLibrary, only: tau1_iso, tau2_iso, pi, g_A, f_pi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: ff, fkn, fk1, fx, fact
+    real(8), allocatable :: f_kn(:,:), f_k1(:,:), f_x(:,:)
+    integer :: lam, K, N, k1, k2, X
+    real(8) :: tau1, tau2
+
+    tau1 = tau1_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
+    tau2 = tau2_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    if(abs(tau1*tau2) < 1.d-16) return
+
+    fact = -(PWD%c3 * 1.d-3 * g_A / f_pi**2) / sqrt(4.d0 * pi) / (2.d0*pi)**3
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * dble(2*kappa+1)
+    res = func_axial_vector_n2lo_c3(kappa, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket)
+    res = res * fact
   end function Tmag_axial_vector_n2lo_c3
 
   function L_axial_vector_n2lo_c4(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, tau1_tau2_tensor_iso, pi, m_pi, g_A, f_pi
+    use MyLibrary, only: pi, g_A, f_pi, m_pi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: ff, fkn, fk1, fx, fact
+    real(8), allocatable :: f_kn(:,:), f_k1(:,:), f_x(:,:)
+    integer :: lam, K, N, k1, k2, X
+    real(8) :: tau_x_tau
+
+    tau_x_tau = tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    if(abs(tau_x_tau) < 1.d-16) return
+
+    fact = -(PWD%c4 * 1.d-3 * g_A / f_pi**2) * sqrt(3.d0) / sqrt(8.d0 * pi) / (2.d0*pi)**3
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * tau_x_tau * (1.d0 - PWD%Q**2/(PWD%Q**2 + m_pi**2))
+    res = func_axial_vector_n2lo_c4(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble((kappa+1)*(2*kappa+3))) * (-1.d0)
+    if(kappa > 0) then
+      res = res + func_axial_vector_n2lo_c4(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+          & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble(kappa*(2*kappa-1)))
+    end if
+    res = res * fact
   end function L_axial_vector_n2lo_c4
 
   function Tel_axial_vector_n2lo_c4(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, tau1_tau2_tensor_iso, pi, g_A, f_pi, tau1_cross_tau2
+    use MyLibrary, only: pi, g_A, f_pi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: ff, fkn, fk1, fx, fact
+    real(8), allocatable :: f_kn(:,:), f_k1(:,:), f_x(:,:)
+    integer :: lam, K, N, k1, k2, X
+    real(8) :: tau_x_tau
+
+    tau_x_tau = tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    if(abs(tau_x_tau) < 1.d-16) return
+
+    fact = -(PWD%c4 * 1.d-3 * g_A / f_pi**2) * sqrt(3.d0) / sqrt(8.d0 * pi) / (2.d0*pi)**3
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * tau_x_tau
+    res = func_axial_vector_n2lo_c4(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble(kappa*(2*kappa+3)))
+    if(kappa > 0) then
+      res = res + func_axial_vector_n2lo_c4(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+          & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble((kappa+1)*(2*kappa-1)))
+    end if
+    res = res * fact
   end function Tel_axial_vector_n2lo_c4
 
   function Tmag_axial_vector_n2lo_c4(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, tau1_tau2_tensor_iso, pi, g_A, f_pi
+    use MyLibrary, only: pi, g_A, f_pi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: ff, fkn, fk1, fx, fact
+    real(8), allocatable :: f_kn(:,:), f_k1(:,:), f_x(:,:)
+    integer :: lam, K, N, k1, k2, X
+    real(8) :: tau_x_tau
+
+    tau_x_tau = tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    if(abs(tau_x_tau) < 1.d-16) return
+
+    fact = -(PWD%c4 * 1.d-3 * g_A / f_pi**2) * sqrt(3.d0) / sqrt(8.d0 * pi) / (2.d0*pi)**3
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * tau_x_tau * dble(2*kappa+1)
+    res = func_axial_vector_n2lo_c4(kappa, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket)
+    res = res * fact
   end function Tmag_axial_vector_n2lo_c4
 
   function L_axial_vector_n2lo_cD(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, tau1_iso, tau2_iso, pi, m_pi, f_pi, triag, Lambda_chi
+    use MyLibrary, only: pi, g_A, f_pi, m_pi, Lambda_chi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: fact
+
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    fact = (PWD%cD / (Lambda_chi * f_pi**2)) / (8.d0 * sqrt(pi)) / (2.d0*pi)**3
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * (1.d0 - PWD%Q**2/(PWD%Q**2 + m_pi**2))
+    res = func_axial_vector_n2lo_cD(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) * sqrt(dble(kappa+1)) * (-1.d0)
+    if(kappa > 0) then
+      res = res + func_axial_vector_n2lo_cD(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+          & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) * sqrt(dble(kappa))
+    end if
+    res = res * fact
   end function L_axial_vector_n2lo_cD
 
   function Tel_axial_vector_n2lo_cD(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, tau1_iso, tau2_iso, pi, f_pi, triag, Lambda_chi
+    use MyLibrary, only: pi, g_A, f_pi, Lambda_chi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: fact
+
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    fact = (PWD%cD / (Lambda_chi * f_pi**2)) / (8.d0 * sqrt(pi)) / (2.d0*pi)**3
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1)))
+    res = func_axial_vector_n2lo_cD(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) * sqrt(dble(kappa))
+    if(kappa > 0) then
+      res = res + func_axial_vector_n2lo_cD(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+          & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) * sqrt(dble(kappa+1))
+    end if
+    res = res * fact
   end function Tel_axial_vector_n2lo_cD
 
   function Tmag_axial_vector_n2lo_cD(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
-    use MyLibrary, only: dcg, sjs, snj, tau1_iso, tau2_iso, pi, f_pi, triag, Lambda_chi
+    use MyLibrary, only: pi, g_A, f_pi, Lambda_chi
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: fact
+
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    fact = (PWD%cD / (Lambda_chi * f_pi**2)) / (8.d0 * sqrt(pi)) / (2.d0*pi)**3
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1)*(2*kappa+1)))
+    res = func_axial_vector_n2lo_cD(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket)
+    res = res * fact
   end function Tmag_axial_vector_n2lo_cD
 
   function Tel_axial_vector_n2lo_c6(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
@@ -1496,6 +1903,21 @@ contains
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: fact
+    real(8) :: tau_x_tau
+
+    tau_x_tau = tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    if(abs(tau_x_tau) < 1.d-16) return
+    fact =-3.d0 * pwd%c6 * 1.d-3 * g_A / (f_pi**2 * sqrt(8.d0 * pi)) * (-1.d0)**kappa
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1)))
+    res = func_axial_vector_n2lo_c6(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble(kappa*(2*kappa+3)))
+    if(kappa > 0) then
+      res = res + func_axial_vector_n2lo_c6(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+          & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble((kappa+1)*(2*kappa-1)))
+    end if
+    res = res * fact
   end function Tel_axial_vector_n2lo_c6
 
   function Tmag_axial_vector_n2lo_c6(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
@@ -1504,7 +1926,83 @@ contains
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra, kappa
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
     type(DMat) :: res
+    real(8) :: fact
+    real(8) :: tau_x_tau
+
+    tau_x_tau = tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    if(abs(tau_x_tau) < 1.d-16) return
+    fact = 3.d0 * pwd%c6 * 1.d-3 * g_A / (f_pi**2 * sqrt(8.d0 * pi)) * (-1.d0)**kappa
+    fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * dble(2*kappa+1)
+    res = func_axial_vector_n2lo_c6(kappa, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket)
+    res = res * fact
   end function Tmag_axial_vector_n2lo_c6
+
+  function func_axial_vector_n2lo_c3(kappa, lambda, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
+    use MyLibrary, only: dcg, sjs, snj, tau1_iso, tau2_iso, gamma_function
+    integer, intent(in) :: kappa, lambda
+    integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra
+    integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
+    type(DMat) :: res
+    integer :: K, N, R, k1, k2, X
+    real(8) :: fKN, fR, fk1k2, fX, ts1, ts2
+    type(angular_integral_lam1), pointer :: fp
+
+    ts1 = tau1_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket) * tau1_iso(s_bra, s_ket)
+    ts2 = tau2_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket) * tau2_iso(s_bra, s_ket)
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+  end function func_axial_vector_n2lo_c3
+
+  function func_axial_vector_n2lo_c4(kappa, lambda, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) result(res)
+    use MyLibrary, only: dcg, sjs, snj, gamma_function, tau1_tau2_tensor_iso
+    integer, intent(in) :: kappa, lambda
+    integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra
+    integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket
+    type(DMat) :: res
+    integer :: K, N, R, Y, k1, k2, Z
+    real(8) :: fK, fNR, fY, fk1k2, fZ
+    type(angular_integral_lam1), pointer :: fp
+
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+  end function func_axial_vector_n2lo_c4
+
+  function func_axial_vector_n2lo_c6(kappa, lambda, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) result(res)
+    use MyLibrary, only: dcg, sjs, snj, gamma_function, tau1_tau2_tensor_iso
+    integer, intent(in) :: kappa, lambda
+    integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra
+    integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket
+    type(DMat) :: res
+    integer :: K, X, R, Y, k1, k2, Z
+    real(8) :: fK, fRX, fY, fk1k2, fZ
+    type(angular_integral_lam1), pointer :: fp
+
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+  end function func_axial_vector_n2lo_c6
+
+  function func_axial_vector_n2lo_cD(kappa, lambda, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
+      & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
+    use MyLibrary, only: dcg, sjs, snj, gamma_function, tau1_iso, tau2_iso
+    integer, intent(in) :: kappa, lambda
+    integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra, zbra
+    integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket, zket
+    type(DMat) :: res
+    real(8) :: fact, ts1, ts2
+    type(angular_integral_lam1), pointer :: fp
+
+    call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
+    ts1 = tau1_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket) * tau1_iso(s_bra, s_ket)
+    ts2 = tau2_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket) * tau2_iso(s_bra, s_ket)
+    if(abs(ts1 + ts2) < 1.d-16) return
+
+    fact = snj(2*Lt_bra, 2*s_bra, 2*Jbra, 2*Lt_ket, 2*s_ket, 2*Jket, 2*kappa, 2, 2*lambda)
+    fp => pwd%fq_unit%lrels(lrel_bra,lrel_ket)
+    res%m(:,:) = pwd_orbital_mat(fp, lcm_bra, lrel_bra, Lt_bra, lcm_ket, lrel_ket, Lt_ket, 0, kappa, kappa) * &
+        & (fact * (ts1 + ts2))
+  end function func_axial_vector_n2lo_cD
 
   function L_vector_nlo(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket, zket) result(res)
@@ -1555,7 +2053,7 @@ contains
     tau_x_tau = -tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
     if(abs(tau_x_tau) < 1.d-8) return
-    fact = g_A**2 / (4.d0 * f_pi**2 * sqrt(4.d0*pi)) / (2.d0*pi)**3 * tau_x_tau 
+    fact = g_A**2 / (4.d0 * f_pi**2 * sqrt(4.d0*pi)) / (2.d0*pi)**3 * tau_x_tau
     fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * (-1.d0)**kappa
     res = func_vector_seagull(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
       & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble((kappa+1)*(2*kappa+3))) * (-1.d0)
@@ -1584,7 +2082,7 @@ contains
       res = res + func_vector_pion_in_flight(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble(kappa*(2*kappa-1)))
     end if
-    res = res * fact 
+    res = res * fact
   end function L_vector_nlo_pion_in_flight
 
   function Tel_vector_nlo_seagull(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
@@ -1597,7 +2095,7 @@ contains
     tau_x_tau = -tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
     if(abs(tau_x_tau) < 1.d-8) return
-    fact = g_A**2 / (4.d0 * f_pi**2 * sqrt(4.d0*pi)) / (2.d0*pi)**3 * tau_x_tau 
+    fact = g_A**2 / (4.d0 * f_pi**2 * sqrt(4.d0*pi)) / (2.d0*pi)**3 * tau_x_tau
     fact = fact * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * (-1.d0)**kappa
     res = func_vector_seagull(kappa+1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
       & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble(kappa*(2*kappa+3)))
@@ -1626,7 +2124,7 @@ contains
       res = res + func_vector_pion_in_flight(kappa-1, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
         & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket) * sqrt(dble((kappa+1)*(2*kappa-1)))
     end if
-    res = res * fact 
+    res = res * fact
   end function Tel_vector_nlo_pion_in_flight
 
   function Tmag_vector_nlo_seagull(kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, zbra, &
@@ -1639,7 +2137,7 @@ contains
     tau_x_tau = -tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
     if(abs(tau_x_tau) < 1.d-8) return
-    fact = g_A**2 / (4.d0 * f_pi**2 * sqrt(4.d0*pi)) / (2.d0*pi)**3 * tau_x_tau 
+    fact = -g_A**2 / (4.d0 * f_pi**2 * sqrt(4.d0*pi)) / (2.d0*pi)**3 * tau_x_tau
     fact = fact * dble(2*kappa+1) * sqrt(dble((2*Jbra+1)*(2*Jket+1))) * (-1.d0)**kappa
     res = func_vector_seagull(kappa, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
       & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket)
@@ -1656,11 +2154,11 @@ contains
     tau_x_tau = -tau_x_tau_op(lrel_bra, s_bra, zbra, lrel_ket, s_ket, zket)
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
     if(abs(tau_x_tau) < 1.d-8) return
-    fact =-3.d0 * g_A**2 / (2.d0 * f_pi**2 * (sqrt(4.d0*pi))) / (2.d0*pi)**3 * tau_x_tau
+    fact = 3.d0 * g_A**2 / (2.d0 * f_pi**2 * (sqrt(4.d0*pi))) / (2.d0*pi)**3 * tau_x_tau
     fact = fact * dble(2*kappa+1) * sqrt(dble((2*Jbra+1)*(2*Jket+1)))
     res = func_vector_pion_in_flight(kappa, kappa, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
       & lcm_ket, lrel_ket, Lt_ket, s_ket, Jket)
-    res = res * fact 
+    res = res * fact
   end function Tmag_vector_nlo_pion_in_flight
 
   function func_vector_seagull(kappa, lambda, lcm_bra, lrel_bra, Lt_bra, s_bra, Jbra, &
@@ -1670,6 +2168,9 @@ contains
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket
     type(DMat) :: res
+    integer :: k1, k2, K, N, X
+    real(8) :: fkN, fx
+    type(angular_integral_lam1), pointer :: fp1, fp2
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
   end function func_vector_seagull
 
@@ -1680,177 +2181,149 @@ contains
     integer, intent(in) :: lcm_bra, lrel_bra, s_bra, Lt_bra, Jbra
     integer, intent(in) :: lcm_ket, lrel_ket, s_ket, Lt_ket, Jket
     type(DMat) :: res
+    integer :: k1, k2, k3, k4, K, k13, k24, N, X, Y
+    real(8) :: fks, fxy
+    type(angular_integral_lam1), pointer :: fp
     call res%zeros(pwd%NMeshMom, pwd%NMeshMom)
   end function func_vector_pion_in_flight
 
-   function tau1_op(lbra, sbra, zbra, lket, sket, zket) result(res)
-    use MyLibrary, only: tau_1, tau_m
+  function tau1_op(lbra, sbra, zbra, lket, sket, zket) result(res)
+    use MyLibrary, only: tau_1, tau_x, tau_y, tau_z
     integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     integer :: ibra, iket
     integer, allocatable :: z1bras(:), z2bras(:), z1kets(:), z2kets(:)
-    real(8) :: norm, phbra, phket, res
-
-    if(zbra==-1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [-1]
-      z2bras = [-1]
-    elseif(zbra==1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [1]
-      z2bras = [1]
-    elseif(zbra==0) then
-      allocate(z1bras(2), z2bras(2))
-      z1bras = [-1,1]
-      z2bras = [1,-1]
-    else
-      write(*,*) __LINE__, __FILE__
-      stop
-    end if
-
-    if(zket==-1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [-1]
-      z2kets = [-1]
-    elseif(zket==1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [1]
-      z2kets = [1]
-    elseif(zket==0) then
-      allocate(z1kets(2), z2kets(2))
-      z1kets = [-1,1]
-      z2kets = [1,-1]
-    else
-      write(*,*) __LINE__, __FILE__
-      stop
-    end if
+    integer :: z1bra, z2bra, z1ket, z2ket
+    real(8) :: norm, phbra, phket, res, me
+    call set_pn_combination(zbra, z1bras, z2bras)
+    call set_pn_combination(zket, z1kets, z2kets)
     res = 0.d0
     norm = 1.d0 / sqrt(dble(size(z1bras) * size(z1kets)) )
     do ibra = 1, size(z1bras)
       phbra = 1.d0
-      if(z1bras(ibra)== 1 .and. z2bras(ibra)==-1) phbra = (-1.d0)**(lbra+sbra)
+      z1bra = z1bras(ibra); z2bra = z2bras(ibra)
+      if(z1bra == 1 .and. z2bra ==-1) phbra = (-1.d0)**(lbra+sbra)
       do iket = 1, size(z1kets)
         phket = 1.d0
-        if(z1kets(iket)== 1 .and. z2kets(iket)==-1) phket = (-1.d0)**(lket+sket)
-        res = res + tau_m(z1bras(ibra), z1kets(iket),tz_phase*(zbra-zket), phase=tz_phase) * &
-            & tau_1(z2bras(ibra), z2kets(iket)) * phbra * phket
+        z1ket = z1kets(iket); z2ket = z2kets(iket)
+        if(z1ket == 1 .and. z2ket ==-1) phket = (-1.d0)**(lket+sket)
+        me = 0.d0
+        if(zbra-zket==0) then
+          me = tau_z(z1bra,z1ket,phase=tz_phase) * tau_1(z2bra,z2ket)
+        else if(zbra-zket==1) then
+          me = (tau_x(z1bra,z1ket) + tau_y(z1bra,z1ket,phase=tz_phase) ) * tau_1(z2bra,z2ket) / sqrt(2.d0)
+        else if(zbra-zket==-1) then
+          me = (tau_x(z1bra,z1ket) - tau_y(z1bra,z1ket,phase=tz_phase) ) * tau_1(z2bra,z2ket) / sqrt(2.d0)
+        else
+          write(*,*) "Error:", __LINE__, __FILE__
+          stop
+        end if
+        res = res + me * phbra * phket
       end do
     end do
     res = res * norm
     deallocate(z1bras, z2bras, z1kets, z2kets)
-   end function tau1_op
+  end function tau1_op
 
-   function tau2_op(lbra, sbra, zbra, lket, sket, zket) result(res)
-    use MyLibrary, only: tau_1, tau_m
+  function tau2_op(lbra, sbra, zbra, lket, sket, zket) result(res)
+    use MyLibrary, only: tau_1, tau_x, tau_y, tau_z
     integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     integer :: ibra, iket
     integer, allocatable :: z1bras(:), z2bras(:), z1kets(:), z2kets(:)
-    real(8) :: norm, phbra, phket, res
-
-    if(zbra==-1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [-1]
-      z2bras = [-1]
-    elseif(zbra==1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [1]
-      z2bras = [1]
-    elseif(zbra==0) then
-      allocate(z1bras(2), z2bras(2))
-      z1bras = [-1,1]
-      z2bras = [1,-1]
-    else
-      write(*,*) __LINE__, __FILE__
-      stop
-    end if
-
-    if(zket==-1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [-1]
-      z2kets = [-1]
-    elseif(zket==1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [1]
-      z2kets = [1]
-    elseif(zket==0) then
-      allocate(z1kets(2), z2kets(2))
-      z1kets = [-1,1]
-      z2kets = [1,-1]
-    else
-      write(*,*) __LINE__, __FILE__
-      stop
-    end if
+    integer :: z1bra, z2bra, z1ket, z2ket
+    real(8) :: norm, phbra, phket, res, me
+    call set_pn_combination(zbra, z1bras, z2bras)
+    call set_pn_combination(zket, z1kets, z2kets)
     res = 0.d0
     norm = 1.d0 / sqrt(dble(size(z1bras) * size(z1kets)) )
     do ibra = 1, size(z1bras)
       phbra = 1.d0
-      if(z1bras(ibra)== 1 .and. z2bras(ibra)==-1) phbra = (-1.d0)**(lbra+sbra)
+      z1bra = z1bras(ibra); z2bra = z2bras(ibra)
+      if(z1bra == 1 .and. z2bra ==-1) phbra = (-1.d0)**(lbra+sbra)
       do iket = 1, size(z1kets)
         phket = 1.d0
-        if(z1kets(iket)== 1 .and. z2kets(iket)==-1) phket = (-1.d0)**(lket+sket)
-        res = res + tau_m(z2bras(ibra), z2kets(iket),tz_phase*(zbra-zket), phase=tz_phase) * &
-            & tau_1(z1bras(ibra), z1kets(iket)) * phbra * phket
+        z1ket = z1kets(iket); z2ket = z2kets(iket)
+        if(z1ket == 1 .and. z2ket ==-1) phket = (-1.d0)**(lket+sket)
+        me = 0.d0
+        if(zbra-zket==0) then
+          me = tau_z(z2bra,z2ket,phase=tz_phase) * tau_1(z1bra,z1ket)
+        else if(zbra-zket==1) then
+          me = (tau_x(z2bra,z2ket) + tau_y(z2bra,z2ket,phase=tz_phase) ) * tau_1(z1bra,z1ket) / sqrt(2.d0)
+        else if(zbra-zket==-1) then
+          me = (tau_x(z2bra,z2ket) - tau_y(z2bra,z2ket,phase=tz_phase) ) * tau_1(z1bra,z1ket) / sqrt(2.d0)
+        else
+          write(*,*) "Error:", __LINE__, __FILE__
+          stop
+        end if
+        res = res + me * phbra * phket
       end do
     end do
     res = res * norm
     deallocate(z1bras, z2bras, z1kets, z2kets)
-   end function tau2_op
+  end function tau2_op
 
-   function tau_x_tau_op(lbra, sbra, zbra, lket, sket, zket) result(res)
-    use MyLibrary, only: tau1_cross_tau2
+  function tau_x_tau_op(lbra, sbra, zbra, lket, sket, zket) result(res)
+    use MyLibrary, only: tau_1, tau_x, tau_y, tau_z
     integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     integer :: ibra, iket
     integer, allocatable :: z1bras(:), z2bras(:), z1kets(:), z2kets(:)
-    real(8) :: norm, phbra, phket, res
-
-    if(zbra==-1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [-1]
-      z2bras = [-1]
-    elseif(zbra==1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [1]
-      z2bras = [1]
-    elseif(zbra==0) then
-      allocate(z1bras(2), z2bras(2))
-      z1bras = [-1,1]
-      z2bras = [1,-1]
-    else
-      write(*,*) __LINE__, __FILE__
-      stop
-    end if
-
-    if(zket==-1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [-1]
-      z2kets = [-1]
-    elseif(zket==1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [1]
-      z2kets = [1]
-    elseif(zket==0) then
-      allocate(z1kets(2), z2kets(2))
-      z1kets = [-1,1]
-      z2kets = [1,-1]
-    else
-      write(*,*) __LINE__, __FILE__
-      stop
-    end if
+    integer :: z1bra, z2bra, z1ket, z2ket
+    real(8) :: norm, phbra, phket, res, me
+    call set_pn_combination(zbra, z1bras, z2bras)
+    call set_pn_combination(zket, z1kets, z2kets)
     res = 0.d0
     norm = 1.d0 / sqrt(dble(size(z1bras) * size(z1kets)) )
     do ibra = 1, size(z1bras)
       phbra = 1.d0
-      if(z1bras(ibra)== 1 .and. z2bras(ibra)==-1) phbra = (-1.d0)**(lbra+sbra)
+      z1bra = z1bras(ibra); z2bra = z2bras(ibra)
+      if(z1bra == 1 .and. z2bra ==-1) phbra = (-1.d0)**(lbra+sbra)
       do iket = 1, size(z1kets)
         phket = 1.d0
-        if(z1kets(iket)== 1 .and. z2kets(iket)==-1) phket = (-1.d0)**(lket+sket)
-        res = res + &
-            & tau1_cross_tau2(z1bras(ibra),z2bras(ibra),z1kets(iket),z2kets(iket),1,tz_phase*(zbra-zket),phase=tz_phase) * &
-            & phbra * phket
+        z1ket = z1kets(iket); z2ket = z2kets(iket)
+        if(z1ket == 1 .and. z2ket ==-1) phket = (-1.d0)**(lket+sket)
+        me = 0.d0
+        if(zbra-zket==0) then
+          me = (tau_x(z1bra,z1ket)*tau_y(z2bra,z2ket,phase=tz_phase) - &
+              & tau_y(z1bra,z1ket,phase=tz_phase)*tau_x(z2bra,z2ket)) * (-1.d0) ! tau_x_tau = i (tau1 x tau2)
+        else if(zbra-zket==1) then
+          me = ((tau_x(z1bra,z1ket) - tau_y(z1bra,z1ket,phase=tz_phase)) * tau_z(z2bra,z2ket,phase=tz_phase) - &
+              & tau_z(z1bra,z1ket,phase=tz_phase) * (tau_x(z2bra,z2ket) - tau_y(z2bra,z2ket,phase=tz_phase))) / sqrt(2.d0)
+        else if(zbra-zket==-1) then
+          me = -((tau_x(z1bra,z1ket) + tau_y(z1bra,z1ket,phase=tz_phase)) * tau_z(z2bra,z2ket,phase=tz_phase) - &
+              & tau_z(z1bra,z1ket,phase=tz_phase) * (tau_x(z2bra,z2ket) + tau_y(z2bra,z2ket,phase=tz_phase))) / sqrt(2.d0)
+        else
+          write(*,*) "Error:", __LINE__, __FILE__
+          stop
+        end if
+        res = res + me * phbra * phket
       end do
     end do
     res = res * norm
     deallocate(z1bras, z2bras, z1kets, z2kets)
-   end function tau_x_tau_op
+  end function tau_x_tau_op
+
+  subroutine set_pn_combination(Tz, res1, res2)
+    integer, intent(in) :: Tz
+    integer, allocatable, intent(out) :: res1(:), res2(:)
+    if(Tz==-1) then
+      allocate(res1(1), res2(1))
+      res1 = [-1]; res2 = [-1]
+    elseif(Tz==1) then
+      allocate(res1(1), res2(1))
+      res1 = [1]; res2 = [1]
+    elseif(Tz==0) then
+      allocate(res1(2), res2(2))
+      res1 = [-1,1]; res2 = [1,-1]
+    else
+      write(*,*) __LINE__, __FILE__
+      stop
+    end if
+  end subroutine set_pn_combination
+
+  function regulator_function(p) result(f)
+    real(8), intent(in) :: p
+    real(8) :: f
+    f = exp(-(p**2 / freg%lambda**2)**freg%reg_pow)
+  end function regulator_function
 
 
   !
@@ -2123,6 +2596,7 @@ contains
               end do
               f_q = f_q + f_z * q_wmesh(nq) * q_mesh(nq) * &
                   & Yfunc(prel_bra, lrel_bra, prel_ket, lrel_ket, q_mesh(nq), lam1)
+              if(freg%reg_local) f_q = f_q * regulator_function(q_mesh(nq)*hc)
             end do
             res = res + f_q * (-1.d0)**lam2 * &
                 & Yfunc(pcm_bra, lcm_bra, pcm_ket, lcm_ket, Q, Llam) * &
@@ -2172,6 +2646,7 @@ contains
                       end do
                       f_q = f_q + f_z * q_wmesh(nq) * q_mesh(nq) * &
                           & Yfunc(prel_bra, l2, prel_ket, l4, q_mesh(nq), X)
+                      if(freg%reg_local) f_q = f_q * regulator_function(q_mesh(nq)*hc)
                     end do
                     res = res + f_q * (-1.d0)**lam * &
                         & Yfunc(pcm_bra, l1, pcm_ket, l3, Q, X) * &

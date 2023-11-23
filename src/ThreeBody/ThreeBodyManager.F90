@@ -347,13 +347,15 @@ contains
           tmp = "AxialV_T1-N2LO-" + params%Regulator + s%str(params%RegulatorPower) + "-" + s%str(params%lambda_3nf_nonlocal)
         else if(s%find(params%Regulator, s%str("Local"))) then
           tmp = "AxialV_T1-N2LO-" + params%Regulator + s%str(params%RegulatorPower) + "-" + s%str(params%lambda_3nf_local)
+        else
+          tmp = "AxialV_T1-N2LO"
         end if
         vals0 = calc_expectation_val_isospin(s%str("Fermi"), params, bra_states, ket_states)
         vals0 = vals0 * geometry_part(tbra,2,tket,zbra,zbra-zket,zket) / dble(A-1)
         vals1 = calc_expectation_val_isospin(s%str("GamowTeller"), params, bra_states, ket_states)
         vals1 = vals1 * geometry_part(tbra,2,tket,zbra,zbra-zket,zket) / dble(A-1)
         vals2 = calc_expectation_val_isospin(tmp, params, bra_states, ket_states)
-        vals2 = vals2 * geometry_part(tbra,2,tket,zbra,zbra-zket,zket)  / g_A
+        vals2 = vals2 * geometry_part(tbra,2,tket,zbra,zbra-zket,zket)  / g_A * (-1.d0) * sqrt(2.d0)
         write(*,'(a16,5f18.8)') "<|| Fermi ||>: ",bra_energies%v(1), ket_energies%v(1), vals0(:)
         write(*,'(a16,5f18.8)') "<|| GT ||>: ",bra_energies%v(1), ket_energies%v(1), vals1(:)
         write(*,'(a16,5f18.8)') "<|| A(2BC) ||>: ",bra_energies%v(1), ket_energies%v(1), vals2(:)
@@ -810,12 +812,12 @@ contains
     real(8), intent(in) :: egs, gs(:)
     real(8) :: g0, g1, g2, delta, ct1, ct2, ct3, ct4, ct5
     type(sys) :: s
-    !g0    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_OBE_gpi0") )
-    !g1    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_OBE_gpi1") )
-    !g2    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_OBE_gpi2") )
-    g0    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_gpi0-N2LO-Local2-500") )
-    g1    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_gpi1-N2LO-Local2-500") )
-    g2    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_gpi2-N2LO-Local2-500") )
+    g0    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_OBE_gpi0") )
+    g1    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_OBE_gpi1") )
+    g2    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_OBE_gpi2") )
+    !g0    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_gpi0-N2LO-Local2-500") )
+    !g1    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_gpi1-N2LO-Local2-500") )
+    !g2    = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_gpi2-N2LO-Local2-500") )
     delta = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_delta-N2LO-Local2-500") )
     Ct1   = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_Ct1-N2LO-Local2-500") )
     Ct2   = calc_edm_isospin_lec( params, egs, gs, s%str("PVTVint_ChEFT_Ct2-N2LO-Local2-500") )

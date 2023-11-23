@@ -1,5 +1,6 @@
 module TwoBodyRelCMOps
   use LinAlgLib
+  use Profiler, only: timer
   use omp_lib
   use ClassSys
   use TwoBodyRelCMChanHO
@@ -18,9 +19,14 @@ module TwoBodyRelCMOps
     procedure :: InitTwoBodyRelCMOpChan
     procedure :: FinTwoBodyRelCMOpChan
     procedure :: PrintTwoBodyRelCMOpChan
+    procedure :: OperatorEvolutionChannel
+    procedure :: TruncateChannel
+
     generic :: init => InitTwoBodyRelCMOpChan
     generic :: release => FinTwoBodyRelCMOpChan
     generic :: prtm => PrintTwoBodyRelCMOpChan
+    generic :: evolve => OperatorEvolutionChannel
+    generic :: truncate => TruncateChannel
   end type TwoBodyRelCMOpChan
 
   type, extends(OperatorDef) :: TwoBodyRelCMOp
@@ -43,6 +49,8 @@ module TwoBodyRelCMOps
     procedure :: IsZero
     procedure :: ReadFile
     procedure :: WriteFile
+    procedure :: Truncate
+    procedure :: OperatorEvolution
 
     generic :: assignment(=) => CopyTwoBodyRelCMOp
     generic :: operator(+) => SumTwoBodyRelCMOp
@@ -55,6 +63,7 @@ module TwoBodyRelCMOps
     generic :: Get2ME => GetTwoBodyRelCMOpME
     generic :: Set2ME => SetTwoBodyRelCMOpME
     generic :: set => SetTwoBodyRelCMOp
+    generic :: evolve => OperatorEvolution
   end type TwoBodyRelCMOp
 
 contains
@@ -431,6 +440,122 @@ contains
     !$omp end do
     !$omp end parallel
   end subroutine SetTwoBodyRelCMOp
+
+  function TruncateChannel(this, chbra_new, chket_new) result(op)
+    class(TwoBodyRelCMOpChan), intent(in) :: this
+    type(TwoBodyRelCMChanHOBasis), intent(in) :: chbra_new, chket_new
+    type(TwoBodyRelCMOpChan) :: op
+    type(TwoBodyRelCMChanHOBasis), pointer :: chbra_old, chket_old
+    integer :: ibra, iket
+    type(RelCMHarmonicOscillator), pointer :: hobra, hoket
+    integer :: ibra_old, iket_old
+
+    call op%init(this%OpName, chbra_new, chket_new)
+    chbra_old => this%rel_ch_bra
+    chket_old => this%rel_ch_ket
+    do ibra = 1, chbra_new%GetNumberStates()
+      do iket = 1, chket_new%GetNumberStates()
+        hobra => chbra_new%GetHOs(ibra)
+        hoket => chket_new%GetHOs(iket)
+        ibra_old = chbra_old%GetIndex(hobra)
+        iket_old = chket_old%GetIndex(hoket)
+        if(ibra_old * iket_old == 0) cycle
+        op%m(ibra,iket) = this%m(ibra_old,iket_old)
+      end do
+    end do
+  end function TruncateChannel
+
+  function Truncate(this, ms_new) result(op)
+    class(TwoBodyRelCMOp), intent(in) :: this
+    type(TwoBodyRelCMSpaceHOBasis), target, intent(in) :: ms_new
+    type(TwoBodyRelCMOp) :: op
+    type(TwoBodyRelCMOpChan) :: opch
+    type(TwoBodyRelCMChanHOBasis), pointer :: chbra, chket
+    integer :: ibra, iket
+    type(RelCMHarmonicOscillator) :: hobra, hoket
+    integer :: ibra_old, iket_old
+    type(str) :: tmp
+
+    call op%init(ms_new, this%GetOpName())
+    do ibra = 1, ms_new%GetNumberChannels()
+      do iket = 1, ms_new%GetNumberChannels()
+        chbra => ms_new%GetChannel(ibra)
+        chket => ms_new%GetChannel(iket)
+        ibra_old = this%ms%GetIndex(chbra%GetJ(), chbra%GetParity(), chbra%GetZ(), chbra%GetJrel(), chbra%GetLcm())
+        iket_old = this%ms%GetIndex(chket%GetJ(), chket%GetParity(), chket%GetZ(), chket%GetJrel(), chket%GetLcm())
+        if(ibra_old * iket_old == 0) cycle
+        if(this%MatCh(ibra_old, iket_old)%is_zero) cycle
+        opch = this%MatCh(ibra_old, iket_old)%Truncate(chbra, chket)
+        op%MatCh(ibra,iket)%DMat = opch%DMat
+      end do
+    end do
+  end function Truncate
+
+  subroutine OperatorEvolutionChannel(this, U)
+    use TwoBodyRelOps
+    class(TwoBodyRelCMOpChan), intent(inout) :: this
+    type(TwoBodyRelOp), intent(in) :: U
+    type(TwoBodyRelCMChanHOBasis), pointer :: chbra, chket
+    type(TwoBodyRelCMOpChan) :: Ubra, Uket
+    type(sys) :: s
+    integer :: jrel_bra, jrel_ket, prel_bra, prel_ket, ibra, iket, zbra, zket
+    type(RelCMHarmonicOscillator), pointer :: hobra, hoket
+
+    chbra => this%rel_ch_bra
+    chket => this%rel_ch_ket
+    call Ubra%init(s%str("UT"), chbra, chbra)
+    call Uket%init(s%str("UT"), chket, chket)
+
+    jrel_bra = chbra%GetJRel()
+    prel_bra = chbra%GetParity() * (-1)**chbra%GetLCM()
+    zbra = chbra%GetZ()
+
+    jrel_ket = chket%GetJRel()
+    prel_ket = chket%GetParity() * (-1)**chket%GetLCM()
+    zket = chket%GetZ()
+
+    do ibra = 1, chbra%GetNumberStates()
+      do iket = 1, chbra%GetNumberStates()
+        hobra => chbra%GetHOs(ibra)
+        hoket => chbra%GetHOs(iket)
+        if(hobra%GetNcm() /= hoket%GetNcm()) cycle
+        Ubra%m(ibra,iket) = U%Get2ME([hobra%GetNrel(), hobra%GetLrel(), hobra%GetSpin(), jrel_bra, zbra], &
+          & [hoket%GetNrel(), hoket%GetLrel(), hoket%GetSpin(), jrel_bra, zbra])
+      end do
+    end do
+
+    do ibra = 1, chket%GetNumberStates()
+      do iket = 1, chket%GetNumberStates()
+        hobra => chket%GetHOs(ibra)
+        hoket => chket%GetHOs(iket)
+        if(hobra%GetNcm() /= hoket%GetNcm()) cycle
+        Uket%m(ibra,iket) = U%Get2ME([hobra%GetNrel(), hobra%GetLrel(), hobra%GetSpin(), jrel_ket, zket], &
+          & [hoket%GetNrel(), hoket%GetLrel(), hoket%GetSpin(), jrel_ket, zket])
+      end do
+    end do
+    this%DMat = Ubra%DMat%t() * this%DMat * Uket%DMat
+    call Ubra%fin()
+    call Uket%fin()
+  end subroutine OperatorEvolutionChannel
+
+  subroutine OperatorEvolution(this, U)
+    use TwoBodyRelOps
+    class(TwoBodyRelCMOp), intent(inout) :: this
+    type(TwoBodyRelOp), intent(in) :: U
+    type(TwoBodyRelCMSpaceHOBasis), pointer :: ms
+    integer :: ibra, iket
+    real(8) :: ti
+    type(sys) :: s
+    ti = omp_get_wtime()
+    ms => this%ms
+    do ibra = 1, ms%GetNumberChannels()
+      do iket = 1, ms%GetNumberChannels()
+        if(this%MatCh(ibra, iket)%is_zero) cycle
+        call this%MatCh(ibra, iket)%evolve(U)
+      end do
+    end do
+    call timer%add(s%str('cm-dep op evolution'), omp_get_wtime() - ti)
+  end subroutine OperatorEvolution
 
   subroutine ReadFile( this, filename )
     class(TwoBodyRelCMOp), intent(inout) :: this

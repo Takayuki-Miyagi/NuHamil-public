@@ -1367,8 +1367,9 @@ contains
           & radius_power(2, n1, l1, n2, l2) * b2 * &
           & asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_plus_tau2,1,0)
       return
+
     case('GamowTeller')
-      ! 1/g_A A -> - sigma tau / 2 (Q->0)
+      ! sigma tau_{+/-}
       if(l1 /= l2) return
       if(n1 /= n2) return
       if(abs(j1 - j2) > 1) return
@@ -1376,11 +1377,12 @@ contains
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 0, 1, 1 ) * &
           & sqrt(dble(2*l1+1)) * &
           & (tau1_iso(s1,s2) * asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_m,1,tz1-tz2) + &
-          &  tau2_iso(s1,s2) * asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau2_m,1,tz1-tz2)) * (-0.5d0)
+          &  tau2_iso(s1,s2) * asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau2_m,1,tz1-tz2)) / sqrt(2.d0)
+      if(tz1 - tz2 > 0) r = r * (-1.d0)
       return
 
     case('Fermi')
-      ! rho -> tau/2 (Q->0)
+      ! tau_{+/-}
       if(l1 /= l2) return
       if(n1 /= n2) return
       if(s1 /= s2) return
@@ -1388,8 +1390,10 @@ contains
       if(tz2 == tz1) return
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 0, 0, 0 ) * &
           & sqrt(dble(2*l1+1)) * sqrt(dble(2*s1+1)) * &
-          & asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_plus_tau2,1,tz1-tz2) * 0.5d0
+          & asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_plus_tau2,1,tz1-tz2) / sqrt(2.d0)
+      if(tz1 - tz2 > 0) r = r * (-1.d0)
       return
+
     case('DFermi')
       if(l1 /= l2) return
       if(n1 /= n2) return
@@ -1749,25 +1753,24 @@ contains
       return
 
     case("GamowTeller")
-      ! 1/g_A A -> - sigma tau / 2 (Q->0)
       if(l1 /= l2) return
       if(n1 /= n2) return
       if(abs(j1 - j2) > 1) return
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 0, 1, 1 ) * &
           & sqrt(dble(2*l1+1)) * &
           & (tau1_iso(s1,s2) * tau1_iso(t1,t2) + &
-          &  tau2_iso(s1,s2) * tau2_iso(t1,t2)) * (-0.5d0)
+          &  tau2_iso(s1,s2) * tau2_iso(t1,t2)) / sqrt(2.d0)
       return
     case("Fermi")
-      ! rho -> tau / 2 (Q->0)
+      if(l1 /= l2) return
       if(l1 /= l2) return
       if(n1 /= n2) return
       if(s1 /= s2) return
       if(j1 /= j2) return
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 0, 0, 0 ) * &
           & sqrt(dble(2*l1+1)) * sqrt(dble(2*s1+1)) * &
-          & tau1_plus_tau2_iso(t1,t2) * 0.5d0
-      return
+          & tau1_plus_tau2_iso(t1,t2) / sqrt(2.d0)
+
     case('DFermi')
       if(l1 /= l2) return
       if(n1 /= n2) return

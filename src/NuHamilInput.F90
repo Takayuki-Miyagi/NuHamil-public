@@ -113,6 +113,7 @@ module NuHamilInput
     integer :: jmax2
     integer :: J2max_NNint
     integer :: nmesh2
+    integer :: NMeshMultipole
     integer :: N_ls ! N boundary for LeeSuzuki
     integer :: snt_mass
     integer :: J2maxLab
@@ -224,6 +225,7 @@ contains
     integer :: J2maxLab=-1
     integer :: Lcm2Max=-1
     integer :: nmesh2 =100
+    integer :: NMeshMultipole = 20
     real(8) :: pmax2 = 8.d0
     integer :: snt_mass = 4
     integer :: svd_rank_tcoef = -1
@@ -342,7 +344,7 @@ contains
         & lab_3bme_precision, path_to_NNrel, path_to_hebeler_files, fname_jacobi_op_for_trans2lab, file_name_n, &
         & svd_rank_tcoef, svd_rank_operator, svd_rank_op_lab, &
         & file_name_phase_shift, Tlab_phase_shift, J2maxLab, Lcm2Max, pn_same_mass, fn_fewbody_wave_function, &
-        & input_nn_file, output_nn_file, Hebeler_fn_head, Hebeler_fn_tails
+        & input_nn_file, output_nn_file, Hebeler_fn_head, Hebeler_fn_tails, NMeshMultipole
 
 
     call getarg(1, inputfile)
@@ -367,6 +369,8 @@ contains
     params%Lcm2Max = Lcm2Max
     params%j2max_NNint = j2max_NNint
     params%nmesh2 = nmesh2
+    params%NMeshMultipole = NMeshMultipole
+
     params%pmax2 = pmax2
     params%NNInt = NNInt
     params%Nmax_srg_edge = Nmax_srg_edge
@@ -525,6 +529,7 @@ contains
     params2%J2maxLab = params1%J2maxLab
     params2%Lcm2Max = params1%Lcm2Max
     params2%nmesh2 =        params1%nmesh2
+    params2%NMeshMultipole = params1%NMeshMultipole
     params2%pmax2  =        params1%pmax2
     params2%NNInt  =        params1%NNInt
     params2%snt_mass =      params1%snt_mass

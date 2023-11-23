@@ -26,6 +26,10 @@ module TwoBodyRelCMSpaceMeshBasis
     procedure :: GetChannelFromIndex
     procedure :: GetChannelFromQNumbers
     procedure :: SetMeshWeight
+    procedure :: GetPrelMin
+    procedure :: GetPrelMax
+    procedure :: GetPcmMin
+    procedure :: GetPcmMax
     generic :: init => InitTwoBodyRelCMSpaceMBasis
     generic :: fin => FinTwoBodyRelCMSpaceMBasis
     generic :: GetChannel => GetChannelFromIndex, GetChannelFromQNumbers
@@ -68,6 +72,30 @@ contains
     integer :: Lcm_max
     Lcm_max = this%Lcm_max
   end function GetLcmMax
+
+  function GetPrelMin(this) result(p)
+    class(TwoBodyRelCMSpaceMBasis), intent(in) :: this
+    real(8) :: p
+    p = this%xmin_rel
+  end function GetPrelMin
+
+  function GetPrelMax(this) result(p)
+    class(TwoBodyRelCMSpaceMBasis), intent(in) :: this
+    real(8) :: p
+    p = this%xmax_rel
+  end function GetPrelMax
+
+  function GetPcmMin(this) result(p)
+    class(TwoBodyRelCMSpaceMBasis), intent(in) :: this
+    real(8) :: p
+    p = this%xmin_cm
+  end function GetPcmMin
+
+  function GetPcmMax(this) result(p)
+    class(TwoBodyRelCMSpaceMBasis), intent(in) :: this
+    real(8) :: p
+    p = this%xmax_cm
+  end function GetPcmMax
 
   function GetIndex(this, j, p, z, jrel, lcm) result(idx)
     class(TwoBodyRelCMSpaceMBasis), intent(in) :: this
