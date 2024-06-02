@@ -227,61 +227,60 @@ contains
   subroutine d2str(string, r)
     real(8), intent(in) :: r
     type(str), intent(out) :: string
-    character(100) :: rst
-    integer :: l
-    l = int(log10(abs(r) + 1.d-8))
-    if(l >= 1) then
-      write(rst, *) int(r)
-    else if(l < 1 .and. l >= 0) then
-      write(rst, '(f10.2)') r
-    else if(l < 0 .and. l >= -1) then
-      write(rst, '(f10.3)') r
-    else if(l < -1 .and. l >= -2) then
-      write(rst, '(f10.4)') r
-    else if(l < -2 .and. l >= -3) then
-      write(rst, '(f10.5)') r
-    else if(l < -3 .and. l >= -4) then
-      write(rst, '(f10.6)') r
-    else if(l < -4 .and. l >= -5) then
-      write(rst, '(f10.7)') r
-    else if(l < -5 .and. l >= -6) then
-      write(rst, '(f10.8)') r
-    else if(l < -6 .and. l >= -7) then
-      write(rst, '(f10.9)') r
-    else
-      rst = "0"
-    end if
+    integer, parameter :: fmax = 8
+    character(100) :: rst, fmt, tmp
+    integer :: i
+    do i = 0, fmax
+      if(abs(r-rnd(r, i)) < 1.d-16 .or. i==fmax) then
+        if(i==0) then
+          write(rst,*) int(r)
+        else
+          write(tmp,*) i
+          fmt = "20." //  trim(adjustl(tmp))
+          write(rst, "(f"// adjustl(fmt) // ")")  r
+        end if
+        exit
+      end if
+    end do
+    if(abs(r) < 10.d0**(-fmax)) rst = '0'
+
     string= trim(adjustl(rst))
+    contains
+      function rnd(val, n) result(res)
+        real(8), intent(in) :: val
+        integer, intent(in) :: n
+        real(8) :: res
+        res = anint(val*10.d0**n) / 10.d0**n
+      end function rnd
   end subroutine d2str
 
   subroutine f2str(string, r)
     real(4), intent(in) :: r
     type(str), intent(out) :: string
-    character(100) :: rst
-    integer :: l
-    l = int(log10(abs(r) + 1.d-8))
-    if(l >= 1) then
-      write(rst, *) int(r)
-    else if(l < 1 .and. l >= 0) then
-      write(rst, '(f10.2)') r
-    else if(l < 0 .and. l >= -1) then
-      write(rst, '(f10.3)') r
-    else if(l < -1 .and. l >= -2) then
-      write(rst, '(f10.4)') r
-    else if(l < -2 .and. l >= -3) then
-      write(rst, '(f10.5)') r
-    else if(l < -3 .and. l >= -4) then
-      write(rst, '(f10.6)') r
-    else if(l < -4 .and. l >= -5) then
-      write(rst, '(f10.7)') r
-    else if(l < -5 .and. l >= -6) then
-      write(rst, '(f10.8)') r
-    else if(l < -6 .and. l >= -7) then
-      write(rst, '(f10.9)') r
-    else
-      rst = "0"
-    end if
+    integer, parameter :: fmax = 8
+    character(100) :: rst, fmt, tmp
+    integer :: i
+    do i = 0, fmax
+      if(abs(r-rnd(r, i)) < 1.d-16 .or. i==fmax) then
+        if(i==0) then
+          write(rst,*) int(r)
+        else
+          write(tmp,*) i
+          fmt = "20." //  trim(adjustl(tmp))
+          write(rst, "(f"// adjustl(fmt) // ")")  r
+        end if
+        exit
+      end if
+    end do
+    if(abs(r) < 10.d0**(-fmax)) rst = '0'
     string= trim(adjustl(rst))
+    contains
+      function rnd(val, n) result(res)
+        real(4), intent(in) :: val
+        integer, intent(in) :: n
+        real(4) :: res
+        res = anint(val*10.d0**n) / 10.d0**n
+      end function rnd
   end subroutine f2str
 
   subroutine char2str(string, cha)
