@@ -47,8 +47,8 @@ module AxialVectorQ0
 
   type(CGsStore) :: cgs
   real(8) :: y1_fact, y1_fact_inv
-  !logical, parameter :: relativistic_correction = .true.
-  logical, parameter :: relativistic_correction = .false.
+  logical, parameter :: relativistic_correction = .true.
+  !logical, parameter :: relativistic_correction = .false.
 contains
 
   subroutine show_options(this)
@@ -169,12 +169,12 @@ contains
   end function calc_matrix_element
 
   subroutine set_helicity_rep_pn(this, fq, pbra, pket, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: pi, tau_1, tau_x, tau_y, tau_z
+    use MyLibrary, only: pi, tau1_m, tau2_m, tau1_cross_tau2, make_beta_hermitian
     type(AxialCurrentQ0), intent(in) :: this
     type(MomFunctions), intent(inout) :: fq
     real(8), intent(in) :: pbra, pket
     integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
-    integer :: ibra, iket, i, m
+    integer :: ibra, iket, i, m, mu_Tz
     integer :: lams_bra(2), lams_ket(2)
     real(8), allocatable :: v1(:), v2(:), v3(:), v4(:)
     real(8) :: tau1, tau2, tau_x_tau
@@ -184,31 +184,19 @@ contains
     allocate(v3(this%GetNMesh()))
     allocate(v4(this%GetNMesh()))
 
-    select case((z1ket+z2ket-z1bra-z2bra)/2)
-    case(0)
-      tau1 = tau_z(z1bra,z1ket,phase=-1) * tau_1(z2bra,z2ket)
-      tau2 = tau_z(z2bra,z2ket,phase=-1) * tau_1(z1bra,z1ket)
-      tau_x_tau = (tau_x(z1bra,z1ket)*tau_y(z2bra,z2ket,phase=-1) - tau_y(z1bra,z1ket,phase=-1)*tau_x(z2bra,z2ket)) * (-1.d0) ! tau_x_tau = i (tau1 x tau2)
-    case(-1)
-      tau1 = (tau_x(z1bra,z1ket) + tau_y(z1bra, z1ket, phase=-1) ) * tau_1(z2bra,z2ket) / sqrt(2.d0)
-      tau2 = (tau_x(z2bra,z2ket) + tau_y(z2bra, z2ket, phase=-1) ) * tau_1(z1bra,z1ket) / sqrt(2.d0)
-      tau_x_tau = -((tau_x(z1bra,z1ket) + tau_y(z1bra,z1ket,phase=-1)) * tau_z(z2bra,z2ket,phase=-1) - &
-          & tau_z(z1bra,z1ket,phase=-1) * (tau_x(z2bra,z2ket) + tau_y(z2bra,z2ket,phase=-1))) / sqrt(2.d0)
-    case(1)
-      tau1 = (tau_x(z1bra,z1ket) - tau_y(z1bra, z1ket,phase=-1) ) * tau_1(z2bra,z2ket) / sqrt(2.d0)
-      tau2 = (tau_x(z2bra,z2ket) - tau_y(z2bra, z2ket,phase=-1) ) * tau_1(z1bra,z1ket) / sqrt(2.d0)
-      tau_x_tau = ((tau_x(z1bra,z1ket) - tau_y(z1bra,z1ket,phase=-1)) * tau_z(z2bra,z2ket,phase=-1) - &
-          & tau_z(z1bra,z1ket,phase=-1) * (tau_x(z2bra,z2ket) - tau_y(z2bra,z2ket,phase=-1))) / sqrt(2.d0)
-    case default
-      write(*,*) "Error: ", __LINE__, __FILE__
-      stop
-    end select
+    mu_Tz = (z1ket+z2ket-z1bra-z2bra)/2
+    tau1 = tau1_m(z1bra, z2bra, z1ket, z2ket, 1, mu_Tz, phase=-1)
+    tau2 = tau2_m(z1bra, z2bra, z1ket, z2ket, 1, mu_Tz, phase=-1)
+    tau_x_tau = tau1_cross_tau2(z1bra, z2bra, z1ket, z2ket, 1, mu_Tz, phase=-1) * (-1.d0) ! tau_x_tau = i (tau1 x tau2)
+    tau1 = make_beta_hermitian(tau1, 1, mu_Tz, normalize=.false.)
+    tau2 = make_beta_hermitian(tau2, 1, mu_Tz, normalize=.false.)
+    tau_x_tau = make_beta_hermitian(tau_x_tau, 1, mu_Tz, normalize=.false.)
 
     v1(:) = 0.d0; v2(:) = 0.d0; v3(:) = 0.d0; v4(:) = 0.d0
     call qdep_term_q( this, fq, v1 )
     call qdep_term_q_x_sigma( this, fq, v2 )
     call qdep_term_sigma( this, fq, v3 )
-    if(relativistic_correction) call qdep_term_p_s_dot_q( this, fq, v4 )
+    !if(relativistic_correction) call qdep_term_p_s_dot_q( this, fq, v4 ) ! this term is not tested
 
     do ibra = 1, this%GetNumHeli()
       lams_bra = this%GetHelicities(ibra)
@@ -259,7 +247,7 @@ contains
     call qdep_term_q( this, fq, v1 )
     call qdep_term_q_x_sigma( this, fq, v2 )
     call qdep_term_sigma( this, fq, v3 )
-    if(relativistic_correction) call qdep_term_p_s_dot_q( this, fq, v4 )
+    !if(relativistic_correction) call qdep_term_p_s_dot_q( this, fq, v4 ) ! this term is not tested
     tau1 = tau1_iso(tbra,tket)
     tau2 = tau2_iso(tbra,tket)
     tau_x_tau = tau1_tau2_tensor_iso(tbra,tket,1) * sqrt(2.d0) ! tau_x_tau = i(t1 x t2) = sqrt(2) [t1 t2]_1
@@ -323,7 +311,7 @@ contains
   end subroutine qdep_term_q_x_sigma
 
   subroutine qdep_term_sigma(this, fq, v)
-    use MyLibrary, only: f_pi, lambda_chi
+    use MyLibrary, only: f_pi, lambda_chi, g_A, m_nucleon
     type(AxialCurrentQ0), intent(in) :: this
     type(MomFunctions), intent(in) :: fq
     real(8), intent(inout) :: v(:)

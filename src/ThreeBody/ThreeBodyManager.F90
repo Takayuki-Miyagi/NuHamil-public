@@ -354,11 +354,11 @@ contains
         vals0 = vals0 * geometry_part(tbra,2,tket,zbra,zbra-zket,zket) / dble(A-1)
         vals1 = calc_expectation_val_isospin(s%str("GamowTeller"), params, bra_states, ket_states)
         vals1 = vals1 * geometry_part(tbra,2,tket,zbra,zbra-zket,zket) / dble(A-1)
-        vals2 = calc_expectation_val_isospin(tmp, params, bra_states, ket_states)
-        vals2 = vals2 * geometry_part(tbra,2,tket,zbra,zbra-zket,zket)  / g_A * (-1.d0) * sqrt(2.d0)
+        !vals2 = calc_expectation_val_isospin(tmp, params, bra_states, ket_states)
+        !vals2 = vals2 * geometry_part(tbra,2,tket,zbra,zbra-zket,zket)  / g_A * (-1.d0) * sqrt(2.d0)
         write(*,'(a16,5f18.8)') "<|| Fermi ||>: ",bra_energies%v(1), ket_energies%v(1), vals0(:)
         write(*,'(a16,5f18.8)') "<|| GT ||>: ",bra_energies%v(1), ket_energies%v(1), vals1(:)
-        write(*,'(a16,5f18.8)') "<|| A(2BC) ||>: ",bra_energies%v(1), ket_energies%v(1), vals2(:)
+        !write(*,'(a16,5f18.8)') "<|| A(2BC) ||>: ",bra_energies%v(1), ket_energies%v(1), vals2(:)
         write(*,*)
 
 

@@ -3,36 +3,46 @@ module MyLibrary
   use ClassSys, only: sys
   implicit none
 
-  real(8), parameter, public :: pi = acos(-1.d0)         ! \pi
+  !real(8), parameter, public :: pi = 3.141592741012573d0 ! \pi
+  real(8), parameter, public :: pi = acos(-1.d0) ! \pi
   real(8), parameter, public :: hc = 197.32705d0         ! \hbar c [MeV fm] or [eV nm]
-  real(8), parameter, public :: m_e = 510.9989461        ! electron mass [keV]
+  real(8), parameter, public :: m_e = 510.9989461 ! electron mass [keV]
   real(8), parameter, public :: alpha = 137.035999d0     ! electric fine structure constant
-  real(8), parameter, public :: m_proton = 938.27231d0   ! proton mass [MeV] 
-  real(8), parameter, public :: m_neutron = 939.56563d0  ! neutron mass [MeV]
-  real(8), parameter, public :: m_nucleon = 938.91897d0  ! MeV, nucleon mass
-  real(8), parameter, public :: m_red_pn = 469.45926d0   ! reduced mass of pn
-  real(8), parameter, public :: g_V = 1.0d0              ! vector coupling
-  real(8), parameter, public :: g_A = 1.27d0             ! axial vector coupling
-  real(8), parameter, public :: g_A_GT = 1.29d0          ! axial vector coupling, corrected Goldberger–Treiman relation: g_{pi NN} = g_A M_N / f_pi
-  real(8), parameter, public :: f_pi = 92.2d0            ! pion decay constatnt [MeV]
-  real(8), parameter, public :: m_pi = 138.038d0         ! MeV, pion mass
-  real(8), parameter, public :: m_eta = 547.862d0        ! MeV, eta mass
-  real(8), parameter, public :: m_rho = 775.45d0         ! MeV, rho mass
-  real(8), parameter, public :: m_omega = 782.66d0       ! MeV, omega mass
-  real(8), parameter, public :: g_pi  = 13.07d0          ! coupling NNpi
-  real(8), parameter, public :: g_eta  = 2.24d0          ! coupling NNeta
-  real(8), parameter, public :: g_rho = 2.75d0           ! coupling NNrho
-  real(8), parameter, public :: g_omega = 8.25d0         ! coupling NNomega
-  real(8), parameter, public :: lambda_chi = 700.d0      ! ChEFT break down scale [MeV]
+  real(8), public :: m_proton = 938.27231d0        ! proton mass [MeV] can be changed in LQCD calc.
+  real(8), public :: m_neutron = 939.56563d0       ! neutron mass [MeV] can be changed in LQCD calc.
+  real(8), public :: m_nucleon = 938.91897d0       ! MeV, nucleon mass
+  real(8), public :: m_red_pn = 469.45926d0        ! reduced mass of pn
+  real(8), public :: g_V = 1.0d0         ! vector coupling
+  real(8), public :: g_A = 1.27d0        ! axial vector coupling
+  real(8), public :: g_A_GT = 1.29d0     ! axial vector coupling, corrected Goldberger–Treiman relation: g_{pi NN} = g_A M_N / f_pi
+  real(8), public :: f_pi = 92.2d0       ! pion decay constatnt [MeV]
+  real(8), public :: m_pi = 138.038d0       ! MeV, pion mass
+  real(8), public :: m_eta = 547.862d0      ! MeV, eta mass
+  real(8), public :: m_rho = 775.45d0       ! MeV, rho mass
+  real(8), public :: m_omega = 782.66d0     ! MeV, omega mass
+  real(8), public :: g_pi  = 13.07d0     ! coupling NNpi
+  real(8), public :: g_eta  = 2.24d0     ! coupling NNeta
+  real(8), public :: g_rho = 2.75d0     ! coupling NNrho
+  real(8), public :: g_omega = 8.25d0   ! coupling NNomega
+  real(8), parameter, public :: lambda_chi = 700.d0 ! ChEFT break down scale [MeV]
   !real(8), parameter, public :: lambda_chi = 1158.61937d0 ! ChEFT break down scale [MeV] 4pi * f_pi
-  real(8), parameter, public :: gs = 0.880               ! nucleon's magnetic moemnt g-factor isoscalar
-  real(8), parameter, public :: gv = 4.706               ! nucleon's magnetic moment g-factor isovector  mu_{p/n} = (gs +/- gv)/2
+  real(8), parameter, public :: gs = 0.880d0     ! nucleon's magnetic moemnt g-factor isoscalar
+  real(8), parameter, public :: gv = 4.706d0     ! nucleon's magnetic moment g-factor isovector  mu_{p/n} = (gs +/- gv)/2
+  logical, parameter :: Make_BetaDecay_Hermitian = .true. 
+  ! Note for Make_BetaDecay_Hermitian:
+  !  Following rotation group notation, usually one obtains <n|tau|p> = sqrt(2) and <p|tau|n> = -sqrt(2) because of standard Clebsch-Gordan coeffs.
+  !  This leads anti-Hermitian structure in the proton-neutron formalism, which is not great.
+  !  In usual texbooks, the operator is defined such that one has <n|tau|p> = <p|tau|n> = 1.
+  !  If Make_BetaDecay_Hermitian is true, this will be taken into account.
 
   ! cache for Talmi-Moshinsky bracket
-  integer, private, parameter :: n_trinomial = 100
+  integer, private, parameter :: n_trinomial = 100, n_dbinomial=1000, n_triag=500
   real(8), private, allocatable  :: dtrinomial(:,:,:)
+  real(8), private, allocatable  :: dbinomial(:,:), triangle_c(:,:,:)
 
   private :: dtrinomial_func
+  private :: triangle
+  private :: dbinomial_func
 
   !
   ! C interfaces
@@ -303,6 +313,8 @@ contains
       triag = ((i-(j+k))*(i-abs(j-k)) > 0)
   end function triag
 
+
+#if defined(use_couplings_from_gsl)
   function dcg(j1, m1, j2, m2, j3, m3) result(s)
     !
     !  Clebsch-Gordan coefficient
@@ -340,6 +352,171 @@ contains
     real(8) :: s
     s = coupling_9j(j11,j12,j13,j21,j22,j23,j31,j32,j33)
   end function snj
+#else
+  function tjs(j1, j2, j3, m1, m2, m3) result(r)
+    real(8) :: r
+    integer, intent(in) :: j1, j2, j3, m1, m2, m3
+    r = dcg(j1,m1,j2,m2,j3,-m3) / hat(j3) * (-1.d0)**((j1-j2-m3)/2)
+  end function tjs
+
+  function dcg(j1, m1, j2, m2, j3, m3) result(s)
+    !
+    !  Clebsch-Gordan coefficient
+    !
+    !  cg_coef(j1, m1, j2, m2, j3, m3)
+    !  = ((j1)/2, (m1)/2, (j2)/2, (m2)/2 | (j3)/2, (m3)/2)
+    !
+    !  using the formula by Racah (1942)
+    !
+    implicit none
+    integer, intent(in) :: j1, j2, j3, m1, m2, m3
+    integer :: js, jm1, jm2, jm3, k1, k2, k3
+    integer :: iz, izmin, izmax, isign
+    double precision :: s
+    double precision :: tmp, delta
+
+    s = 0.0d0
+    jm1 = j1 - m1
+    jm2 = j2 - m2
+    jm3 = j3 - m3
+
+    ! error and trivial-value check
+    if (abs(m1) > j1 .or. abs(m2) > j2 .or. abs(m3) > j3 .or. &
+        & mod(jm1, 2) /= 0 .or. mod(jm2, 2) /= 0 .or. mod(jm3, 2) /= 0) then
+      write(*,*) 'error [cg_coef]: invalid j or m'
+      write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j1 =', j1, 'm1 =', m1
+      write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j2 =', j2, 'm2 =', m2
+      write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j3 =', j3, 'm3 =', m3
+      stop
+    end if
+
+    ! call triangle(j1, j2, j3, delta, info)
+    ! if (info == 1) return
+    if (max(j1, j2, j3) > n_triag) stop 'increase n_triag'
+    delta = triangle_c( j1, j2, j3 )
+    if (delta == 0.d0) return
+
+    if (m3 /= m1+m2) return
+
+    jm1 = jm1 / 2
+    jm2 = jm2 / 2
+    jm3 = jm3 / 2
+    js = (j1 + j2 + j3)/2
+    k1 = (j2 + j3 - j1)/2
+    k2 = (j3 + j1 - j2)/2
+    k3 = (j1 + j2 - j3)/2
+
+    if (max(j1, j2, j3) > n_dbinomial) stop 'increase n_dbinomial'
+    tmp = sqrt(dbinomial(j1, k2)/dbinomial(j1, jm1)) &
+        & * sqrt(dbinomial(j2, k3)/dbinomial(j2, jm2)) &
+        & * sqrt(dbinomial(j3, k1)/dbinomial(j3, jm3)) &
+        & * sqrt((j3+1.0d0)) * delta
+
+    izmin = max(0, jm1-k2, k3-jm2)
+    izmax = min(k3, jm1, j2-jm2)
+
+    if (izmax > n_dbinomial) stop 'increase n_dbinomial'
+
+    isign = (-1)**izmin
+    do iz = izmin, izmax
+      s = s + isign * dbinomial(k3,iz) * dbinomial(k2,jm1-iz) &
+          & * dbinomial(k1,j2-jm2-iz)
+      isign = isign * (-1)
+    end do
+
+    s = s * tmp
+
+  end function dcg
+
+  function sjs(j1, j2, j3, l1, l2, l3) result(s)
+    !
+    !  6j coefficient
+    !
+    !  sixj(j1, j2, j3, l1, l2, l3) = {(j1)/2 (j2)/2 (j3)/2}
+    !                                {(l1)/2 (l2)/3 (l3)/2}
+    !
+    !  see I. Talmi, Simple Models of Complex Nuclei, p. 158
+    !
+    implicit none
+    integer, intent(in) :: j1, j2, j3, l1, l2, l3
+    double precision :: s
+    double precision :: d
+    integer :: izmin, izmax, iz, isign
+    integer :: js, k1, k2, k3, jl1, jl2, jl3
+
+    s = 0.0d0
+
+    if (max(j1, j2, j3, l1, l2, l3) > n_triag) stop 'increase n_triag'
+
+    d = triangle_c(j1, j2, j3)
+    if (d == 0.d0) return
+
+    d =    triangle_c(j1, l2, l3) * triangle_c(l1, j2, l3) &
+        * triangle_c(l1, l2, j3) / d
+    if ( d == 0.d0 ) return
+
+    ! call triangle(j1, j2, j3, deltas, infos)
+    ! call triangle(j1, l2, l3, delta1, info1)
+    ! call triangle(l1, j2, l3, delta2, info2)
+    ! call triangle(l1, l2, j3, delta3, info3)
+    ! if (infos == 1 .or. info1 == 1 .or. info2 == 1 .or. info3 == 1) return
+
+    js = (j1 + j2 + j3)/2
+    k1 = (j2 + j3 - j1)/2
+    k2 = (j3 + j1 - j2)/2
+    k3 = (j1 + j2 - j3)/2
+    jl1 = (j1 + l2 + l3)/2
+    jl2 = (l1 + j2 + l3)/2
+    jl3 = (l1 + l2 + j3)/2
+
+    izmin = max(0, js, jl1, jl2, jl3)
+    izmax = min(k1+jl1, k2+jl2, k3+jl3)
+
+    if (izmax+1 > n_dbinomial) stop 'increase n_dbinomial'
+    isign = (-1)**izmin
+    do iz = izmin, izmax
+      s = s + isign * dbinomial(iz+1, iz-js) &
+          & * dbinomial(k1, iz-jl1) * dbinomial(k2, iz-jl2) &
+          & * dbinomial(k3, iz-jl3)
+      isign = isign * (-1)
+    end do
+    ! s = s * delta1 * delta2 * delta3 / deltas
+    s = s * d
+
+  end function sjs
+
+  function snj(j11, j12, j13, j21, j22, j23, j31, j32, j33) result(s)
+    !
+    !  9j coefficient
+    !
+    !  ninej(j11, j12, j13, j21, j22, j23, j31, j32, j33)
+    !
+    !    {(j11)/2 (j12)/2 (j13)/2}
+    !  = {(j21)/2 (j22)/2 (j23)/2}
+    !    {(j31)/2 (j32)/2 (j33)/2}
+    !
+    !  see I. Talmi, Simple Models of Complex Nuclei, p. 968
+    !
+    implicit none
+    integer, intent(in) :: j11, j12, j13, j21, j22, j23, j31, j32, j33
+    double precision :: s
+    integer :: k, kmin, kmax
+
+    kmin = max(abs(j11-j33), abs(j12-j23), abs(j21-j32))
+    kmax = min(j11+j33, j12+j23, j21+j32)
+
+    s = 0.0d0
+    do k = kmin, kmax, 2
+      s = s + (k+1.0d0) &
+          & * sjs(j11, j12, j13, j23, j33, k) &
+          & * sjs(j21, j22, j23, j12, k, j32) &
+          & * sjs(j31, j32, j33, k, j11, j21)
+    end do
+    s = s * (-1)**kmin
+
+  end function snj
+#endif
+
 
   !!!
   ! For HO transformation bracket
@@ -384,7 +561,7 @@ contains
               if(triag(la,ll,lc)) cycle
 
               r = r + s * t * &
-                  & snj(2*la, 2*lb, 2*l1, 2*lc, 2*ld, 2*l2, 2*ll, 2*lr, 2*lm) * &
+                  & ninej(2*la, 2*lb, 2*l1, 2*lc, 2*ld, 2*l2, 2*ll, 2*lr, 2*lm) * &
                   & g(e1, l1, ea, la, eb, lb) * g(e2, l2, ec, lc, ed, ld) * &
                   & g(ee, ll, ea, la, ec, lc) * g(er, lr, eb, lb, ed, ld)
 
@@ -400,11 +577,171 @@ contains
       real(8) :: r
       integer, intent(in) :: e1, l1, ea, la, eb, lb
 
-      r = dcg(2*la, 0, 2*lb, 0, 2*l1, 0) * dsqrt((2*la + 1) * (2*lb + 1) * &
+      r = cg_coef(2*la, 0, 2*lb, 0, 2*l1, 0) * dsqrt((2*la + 1) * (2*lb + 1) * &
           & dtrinomial(e1 - l1, ea - la, eb - lb) * &
           & dtrinomial(e1 + l1 + 1, ea + la + 1, eb + lb + 1))
 
     end function g
+
+    function cg_coef(j1, m1, j2, m2, j3, m3) result(s)
+      !
+      !  Clebsch-Gordan coefficient
+      !
+      !  cg_coef(j1, m1, j2, m2, j3, m3)
+      !  = ((j1)/2, (m1)/2, (j2)/2, (m2)/2 | (j3)/2, (m3)/2)
+      !
+      !  using the formula by Racah (1942)
+      !
+      implicit none
+      integer, intent(in) :: j1, j2, j3, m1, m2, m3
+      integer :: js, jm1, jm2, jm3, k1, k2, k3
+      integer :: iz, izmin, izmax, isign
+      double precision :: s
+      double precision :: tmp, delta
+
+      s = 0.0d0
+      jm1 = j1 - m1
+      jm2 = j2 - m2
+      jm3 = j3 - m3
+
+      ! error and trivial-value check
+      if (abs(m1) > j1 .or. abs(m2) > j2 .or. abs(m3) > j3 .or. &
+          & mod(jm1, 2) /= 0 .or. mod(jm2, 2) /= 0 .or. mod(jm3, 2) /= 0) then
+          write(*,*) 'error [cg_coef]: invalid j or m'
+          write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j1 =', j1, 'm1 =', m1
+          write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j2 =', j2, 'm2 =', m2
+          write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j3 =', j3, 'm3 =', m3
+          stop
+      end if
+
+      ! call triangle(j1, j2, j3, delta, info)
+      ! if (info == 1) return
+      if (max(j1, j2, j3) > n_triag) stop 'increase n_triag'
+      delta = triangle_c( j1, j2, j3 )
+      if (delta == 0.d0) return
+
+      if (m3 /= m1+m2) return
+
+      jm1 = jm1 / 2
+      jm2 = jm2 / 2
+      jm3 = jm3 / 2
+      js = (j1 + j2 + j3)/2
+      k1 = (j2 + j3 - j1)/2
+      k2 = (j3 + j1 - j2)/2
+      k3 = (j1 + j2 - j3)/2
+
+      if (max(j1, j2, j3) > n_dbinomial) stop 'increase n_dbinomial'
+
+      tmp = sqrt(dbinomial(j1, k2)/dbinomial(j1, jm1)) &
+          & * sqrt(dbinomial(j2, k3)/dbinomial(j2, jm2)) &
+          & * sqrt(dbinomial(j3, k1)/dbinomial(j3, jm3)) &
+          & * sqrt((j3+1.0d0)) * delta
+
+      izmin = max(0, jm1-k2, k3-jm2)
+      izmax = min(k3, jm1, j2-jm2)
+
+      if (izmax > n_dbinomial) stop 'increase n_dbinomial'
+
+      isign = (-1)**izmin
+      do iz = izmin, izmax
+        s = s + isign * dbinomial(k3,iz) * dbinomial(k2,jm1-iz) &
+            & * dbinomial(k1,j2-jm2-iz)
+        isign = isign * (-1)
+      end do
+
+      s = s * tmp
+
+    end function cg_coef
+
+    function sixj(j1, j2, j3, l1, l2, l3) result(s)
+      !
+      !  6j coefficient
+      !
+      !  sixj(j1, j2, j3, l1, l2, l3) = {(j1)/2 (j2)/2 (j3)/2}
+      !                                {(l1)/2 (l2)/3 (l3)/2}
+      !
+      !  see I. Talmi, Simple Models of Complex Nuclei, p. 158
+      !
+      implicit none
+      integer, intent(in) :: j1, j2, j3, l1, l2, l3
+      double precision :: s
+      double precision :: d
+      integer :: izmin, izmax, iz, isign
+      integer :: js, k1, k2, k3, jl1, jl2, jl3
+
+      s = 0.0d0
+
+      if (max(j1, j2, j3, l1, l2, l3) > n_triag) stop 'increase n_triag'
+
+      d = triangle_c(j1, j2, j3)
+      if (d == 0.d0) return
+
+      d =    triangle_c(j1, l2, l3) * triangle_c(l1, j2, l3) &
+          * triangle_c(l1, l2, j3) / d
+      if ( d == 0.d0 ) return
+
+      ! call triangle(j1, j2, j3, deltas, infos)
+      ! call triangle(j1, l2, l3, delta1, info1)
+      ! call triangle(l1, j2, l3, delta2, info2)
+      ! call triangle(l1, l2, j3, delta3, info3)
+      ! if (infos == 1 .or. info1 == 1 .or. info2 == 1 .or. info3 == 1) return
+
+      js = (j1 + j2 + j3)/2
+      k1 = (j2 + j3 - j1)/2
+      k2 = (j3 + j1 - j2)/2
+      k3 = (j1 + j2 - j3)/2
+      jl1 = (j1 + l2 + l3)/2
+      jl2 = (l1 + j2 + l3)/2
+      jl3 = (l1 + l2 + j3)/2
+
+      izmin = max(0, js, jl1, jl2, jl3)
+      izmax = min(k1+jl1, k2+jl2, k3+jl3)
+
+      if (izmax+1 > n_dbinomial) stop 'increase n_dbinomial'
+
+      isign = (-1)**izmin
+      do iz = izmin, izmax
+        s = s + isign * dbinomial(iz+1, iz-js) &
+            & * dbinomial(k1, iz-jl1) * dbinomial(k2, iz-jl2) &
+            & * dbinomial(k3, iz-jl3)
+        isign = isign * (-1)
+      end do
+      ! s = s * delta1 * delta2 * delta3 / deltas
+      s = s * d
+
+    end function sixj
+
+    function ninej(j11, j12, j13, j21, j22, j23, j31, j32, j33) result(s)
+      !
+      !  9j coefficient
+      !
+      !  ninej(j11, j12, j13, j21, j22, j23, j31, j32, j33)
+      !
+      !    {(j11)/2 (j12)/2 (j13)/2}
+      !  = {(j21)/2 (j22)/2 (j23)/2}
+      !    {(j31)/2 (j32)/2 (j33)/2}
+      !
+      !  see I. Talmi, Simple Models of Complex Nuclei, p. 968
+      !
+      implicit none
+      integer, intent(in) :: j11, j12, j13, j21, j22, j23, j31, j32, j33
+      double precision :: s
+      integer :: k, kmin, kmax
+
+      kmin = max(abs(j11-j33), abs(j12-j23), abs(j21-j32))
+      kmax = min(j11+j33, j12+j23, j21+j32)
+
+      s = 0.0d0
+      do k = kmin, kmax, 2
+        s = s + (k+1.0d0) &
+            & * sixj(j11, j12, j13, j23, j33, k) &
+            & * sixj(j21, j22, j23, j12, k, j32) &
+            & * sixj(j31, j32, j33, k, j11, j21)
+      end do
+      s = s * (-1)**kmin
+
+    end function ninej
+
   end function gmosh
 
   subroutine init_dtrinomial()
@@ -412,6 +749,32 @@ contains
     integer :: i, j, k, n, m, info
     real(8) :: d
     allocate(dtrinomial(0:n_trinomial, 0:n_trinomial, 0:n_trinomial))
+    allocate( dbinomial(0:n_dbinomial, 0:n_dbinomial) )
+    allocate(triangle_c(0:n_triag, 0:n_triag, 0:n_triag))
+    dbinomial(:,:) = 0.d0
+
+    !$omp parallel do private(n, m) schedule(dynamic)
+    do n = 0, n_dbinomial
+      do m = 0, n
+        dbinomial(n, m) = dbinomial_func(n, m)
+      end do
+    end do
+
+    triangle_c(:,:,:) = 0.d0
+    !$omp parallel do private( i, j, k, d, info ) schedule (dynamic)
+    do k = 0, n_triag
+      do j = 0, n_triag
+        do i = 0, n_triag
+          call triangle(i, j, k, d, info)
+          if (info == 1) then
+            triangle_c(i, j, k) = 0.d0
+            cycle
+          end if
+          triangle_c(i, j, k) = d
+        end do
+      end do
+    end do
+
     !$omp parallel do private( i, j, k ) schedule (dynamic)
     do k = 0, n_trinomial
       do j = 0, n_trinomial
@@ -424,6 +787,8 @@ contains
 
   subroutine fin_dtrinomial()
     deallocate(dtrinomial)
+    deallocate(dbinomial)
+    deallocate(triangle_c)
   end subroutine fin_dtrinomial
 
 
@@ -445,6 +810,84 @@ contains
     end if
     s = double_factorial(i) / (double_factorial(j) * double_factorial(k))
   end function dtrinomial_func
+
+  subroutine triangle(j1, j2, j3, delta, info)
+    !
+    !  triangle often used in calculation of 3j, 6j etc.
+    !  delta
+    !  = sqrt(((j1+j2-j3)/2)!((j1-j2+j3)/2)!((-j1+j2+j3)/2)!/(1+(j1+j2+j3)/2)!)
+    !
+    implicit none
+    integer, intent(in) :: j1, j2, j3
+    double precision, intent(out) :: delta
+    integer, intent(out) :: info
+    integer :: js, k1, k2, k3
+
+    info = 0
+    js = j1 + j2 + j3
+    k1 = j2 + j3 - j1
+    k2 = j3 + j1 - j2
+    k3 = j1 + j2 - j3
+
+    if (j1 < 0 .or. j2 < 0 .or. j3 < 0) then
+      write(*,*) 'error [triangle]: invalid j'
+      write(*,'(1a, 1i4, 2x, 1a, 1i4, 2x, 1a, 1i4)') &
+          & 'j1 =', j1, 'j2 =', j2, 'j3 =', j3
+      stop
+    end if
+    if (k1 < 0 .or. k2 < 0 .or. k3 <0 .or. mod(js, 2) /=0) then
+      info = 1
+      return
+    endif
+
+    ! exclude too large arguments to prevent from round-off error
+    if (js > n_triag*3) then
+      write(*,'(1a, 1i5, 1a)') '[triangle]: j1+j2+j3 =', js, ' is too large'
+      stop
+    end if
+
+    js = js / 2
+    k1 = k1 / 2
+
+    if (js > n_dbinomial) stop 'increase n_dbinomial'
+
+    delta = 1.0d0 / &
+        & (sqrt(dbinomial(js, j3)) * sqrt(dbinomial(j3, k1)) * sqrt(js+1.0d0))
+
+  end subroutine triangle
+
+  function dbinomial_func(n, m) result(s)
+    !
+    !  binomial coefficient: n_C_m
+    !  s: double precision
+    !
+    integer, intent(in) :: n, m
+    double precision :: s, s1, s2
+    integer :: i, m1
+
+    s = 1.0d0
+    m1 = min(m, n-m)
+    if (m1 == 0) return
+    if (n > 1000) then
+      write(*,'(1a, 1i6, 1a)') '[dbinomial]: n =', n, ' is too large'
+      stop
+    end if
+
+    if (n < 250) then
+      s1 = 1.0d0
+      s2 = 1.0d0
+      do i = 1, m1
+        s1 = s1 * (n-i+1)
+        s2 = s2 * (m1-i+1)
+      end do
+      s = s1 / s2
+    else
+      do i = 1, m1
+        s = (s * (n-i+1)) / (m1-i+1)
+      end do
+    endif
+
+  end function dbinomial_func
   !!!
   ! end  HO transformation bracket
   !!!
@@ -807,7 +1250,7 @@ contains
     real(8) :: r
     r = 0.d0
     if(m==1) then
-      r = -(tau_x(zbra,zket) - tau_y(zbra,zket,phase)) / sqrt(2.d0)
+      r = -(tau_x(zbra,zket) - tau_y(zbra,zket,phase)) / sqrt(2.d0) ! - ty is due to i^2
     else if(m== 0) then
       r = tau_z(zbra,zket,phase)
     else if(m==-1) then
@@ -827,7 +1270,8 @@ contains
     do m1 = -1, 1
       m2 = m-m1
       if(abs(m2)>1) cycle
-      r = r + dcg(2, 2*m1, 2, 2*m2, 2*rank, 2*m) * tau_m(z1bra,z1ket,m1,phase) * tau_m(z2bra,z2ket,m2,phase)
+      r = r + dcg(2, 2*m1, 2, 2*m2, 2*rank, 2*m) * tau_m(z1bra,z1ket,m1,phase) * &
+          & tau_m(z2bra,z2ket,m2,phase)
     end do
   end function tau1_tau2_tensor
 
@@ -902,7 +1346,7 @@ contains
     integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket, rank, m
     integer, intent(in), optional :: phase
     integer, allocatable :: z1bra(:), z2bra(:), z1ket(:), z2ket(:)
-    real(8) :: r
+    real(8) :: r, tmp
     integer :: ibra, iket
     real(8) :: norm, ph_bra, ph_ket
     call pn_combinations()
@@ -914,7 +1358,9 @@ contains
       do iket = 1, size(z1ket)
         ph_ket = 1.d0
         if(z1ket(iket)== 1 .and. z2ket(iket)==-1) ph_ket = (-1.d0)**(lket+sket)
-        r = r + func(z1bra(ibra),z2bra(ibra),z1ket(iket),z2ket(iket),rank,m,phase) * ph_bra*ph_ket
+        tmp = func(z1bra(ibra),z2bra(ibra),z1ket(iket),z2ket(iket),rank,m,phase) * ph_bra*ph_ket
+        tmp = make_beta_hermitian(tmp, rank, m, normalize=.true.)
+        r = r + tmp
       end do
     end do
     r = r*norm
@@ -955,8 +1401,24 @@ contains
         stop
       end if
     end subroutine pn_combinations
-
   end function asym_isospin_func_pn
+
+  function make_beta_hermitian(me, kappa, mu, normalize) result(res)
+    real(8), intent(in) :: me
+    integer, intent(in) :: kappa, mu
+    logical, intent(in), optional :: normalize
+    logical :: norm
+    real(8) :: res
+    norm = .true.
+    if(present(normalize)) norm = normalize
+    res = me
+    if(.not. Make_BetaDecay_Hermitian) return
+    if(kappa /= 1) return
+    if(mu== 0) return
+    if(mu== 1) res = -me
+    if(mu==-1) res =  me
+    if(norm) res = res / sqrt(2.d0)
+  end function make_beta_hermitian
 
   !
   ! isospin function isospin formalism

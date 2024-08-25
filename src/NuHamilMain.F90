@@ -56,7 +56,6 @@ program main
     end if
   end if
   call init_dtrinomial()
-
   call init_M1_2b_current(params%hw, params%N2max, params%Jmax2) ! frequency conversion won't work
 
   if(params%test_mode) then

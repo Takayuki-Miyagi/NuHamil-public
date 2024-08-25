@@ -537,6 +537,7 @@ contains
         do j = jmin, jmax
           jd = 2*j
           if(half_j12) jd = 2*j-1
+          if(abs(m1d+m2d) > jd) cycle
           this%v(m1,m2,j) = dcg(j1d,m1d,j2d,m2d,jd,m1d+m2d)
         end do
       end do

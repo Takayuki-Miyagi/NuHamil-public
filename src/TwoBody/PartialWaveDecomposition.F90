@@ -1,5 +1,6 @@
 module PartialWaveDecomposition
   use, intrinsic :: iso_c_binding
+  use MyLibrary, only: pi
   implicit none
   public :: PWD
   public :: identity_helicity_rep, sigma_dot_sigma, sigma1q_sigma2q, &
@@ -8,7 +9,6 @@ module PartialWaveDecomposition
       & helicity_expectation_value_y, helicity_expectation_value_z, helicity_expectation_value_sigma, &
       & get_zmesh, get_y1
   private
-  real(8), parameter, private :: pi = 3.141592741012573d0 ! \pi
 
   type :: PWD
     integer, private :: NMesh = 100 ! angular mesh number
@@ -212,6 +212,7 @@ contains
     integer :: ibra, iket
     integer :: lams_bra(2), lams_ket(2)
     real(8) :: r
+    complex(8), parameter :: i_unit = (0.d0, 1.d0)
 
     call multiply_regulator(this, op, pbra, pket)
     r = 0.d0
@@ -227,8 +228,11 @@ contains
             & ovlaps%get_ovlap_lsj(lket,sket,lams_ket(1),lams_ket(2),jket)
       end do
     end do
-    if(mod(lbra-lket,2) == 0) r = r * (-1.d0)**((lbra-lket  )/2) ! comes from Fourier trans
-    if(mod(lbra-lket,2) == 1) r = r * (-1.d0)**((lbra-lket-3)/2) ! comes from Fourier trans, (-i) is factored out
+    if(mod(abs(lbra-lket),2) == 0) then
+      r = r * dble(i_unit ** (lbra-lket)) ! symmetric
+    else
+      r = r * dble(i_unit ** (lbra-lket-1)) ! skew, in unit of i
+    end if
   end function do_pwd
 
   function projection_to_j(this, op, ibra, iket, jbra, jket) result(r)
@@ -246,6 +250,7 @@ contains
     lam_ket = (lams_ket(1) - lams_ket(2))/2
 
     r = 0.d0
+    if(abs(lam_ket) > jket) return
     if(abs(lam_bra) > jbra) return
     do mu = -this%GetRank(), this%GetRank()
       if(abs(mu+lam_ket) > jbra) cycle
@@ -266,6 +271,7 @@ contains
     r = 0.d0
     lam = lam1-lam2
     if(2*s < abs(lam)) return
+    if(2*j < abs(lam)) return
     r = sqrt( dble(2*l+1) / dble(2*j+1) ) * &
         & dcg(2*l, 0, 2*s, lam, 2*j, lam) * dcg(1, lam1, 1, -lam2, 2*s, lam)
   end function overlap_helicity_lsj
@@ -410,7 +416,7 @@ contains
   end function sigma_minus_qq
 
   function sigma_cross_q(lam1,lam2,lam3,lam4,pout,pin,idx_mesh) result(r)
-    ! (s1 x s2) . q
+    ! i(s1 x s2) . q
     integer, intent(in) :: lam1, lam2, lam3, lam4, idx_mesh
     real(8), intent(in) :: pout, pin
     real(8) :: r
@@ -424,10 +430,11 @@ contains
         & helicity_expectation_value_z(-lam2, -lam4, idx_mesh) - &
         & helicity_expectation_value_z( lam1,  lam3, idx_mesh) * &
         & helicity_expectation_value_y(-lam2, -lam4, idx_mesh) )
+    r = r * (-1.d0)
   end function sigma_cross_q
 
   function sigma_cross_qq(lam1,lam2,lam3,lam4,pout,pin,idx_mesh) result(r)
-    ! (s1 x s2) . Q with Q = pout + pin
+    ! i(s1 x s2) . Q with Q = pout + pin
     integer, intent(in) :: lam1, lam2, lam3, lam4, idx_mesh
     real(8), intent(in) :: pout, pin
     real(8) :: r
@@ -441,6 +448,7 @@ contains
         & helicity_expectation_value_z(-lam2, -lam4, idx_mesh) - &
         & helicity_expectation_value_z( lam1,  lam3, idx_mesh) * &
         & helicity_expectation_value_y(-lam2, -lam4, idx_mesh) )
+    r = r * (-1.d0)
   end function sigma_cross_qq
 
   function sigma1q_sigma2q(lam1,lam2,lam3,lam4,pout,pin,idx_mesh) result(r)
@@ -448,7 +456,7 @@ contains
     integer, intent(in) :: lam1, lam2, lam3, lam4, idx_mesh
     real(8), intent(in) :: pout, pin
     real(8) :: r
-    r = -(pout*lam1 - pin*lam3) * (pout*lam2 - pin*lam4) * &
+    r = -(pout*dble(lam1) - pin*dble(lam3)) * (pout*dble(lam2) - pin*dble(lam4)) * &
         & identity_helicity_rep(lam1, lam2, lam3, lam4, idx_mesh)
   end function sigma1q_sigma2q
 
