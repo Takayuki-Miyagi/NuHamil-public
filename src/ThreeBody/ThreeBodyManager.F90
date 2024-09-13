@@ -364,9 +364,9 @@ contains
 
       case default
         if(s%find(oprtr, s%str("Tmag_1B"))) then
-          val = calc_expectation_val_onebody_isospin(oprtr, params, bra_states, ket_states, 0) * &
+          val = calc_expectation_val_onebody_isospin(oprtr, params, bra_states, ket_states, 0, hw_op=1.5d0*params%hw) * &
             & geometry_part(tbra,0,tket,zbra,0,zket)
-          val = val + calc_expectation_val_onebody_isospin(oprtr, params, bra_states, ket_states, 1) * &
+          val = val + calc_expectation_val_onebody_isospin(oprtr, params, bra_states, ket_states, 1, hw_op=1.5d0*params%hw) * &
             & geometry_part(tbra,2,tket,zbra,0,zket)
           val = val / opdef%GetQ() * 2.d0 * m_nucleon * (-1.d0) * sqrt(pi)
           val = val * dble(opdef%GetOpP()) ! this comes from the embedding phase (-1)^l3'+l3
@@ -380,9 +380,9 @@ contains
           write(*,'(a16,3f18.8,es18.8)') oprtr%val,bra_energies%v(1), ket_energies%v(1), opdef%GetQ(), val
 
         else if(s%find(oprtr, s%str("M_1B"))) then
-          val = calc_expectation_val_onebody_isospin(oprtr, params, bra_states, ket_states, 0) * &
+          val = calc_expectation_val_onebody_isospin(oprtr, params, bra_states, ket_states, 0, hw_op=1.5d0*params%hw) * &
             & geometry_part(tbra,0,tket,zbra,0,zket)
-          val = val + calc_expectation_val_onebody_isospin(oprtr, params, bra_states, ket_states, 1) * &
+          val = val + calc_expectation_val_onebody_isospin(oprtr, params, bra_states, ket_states, 1, hw_op=1.5d0*params%hw) * &
             & geometry_part(tbra,2,tket,zbra,0,zket)
           val = val * dble(opdef%GetOpP()) ! this comes from the embedding phase (-1)^l3'+l3
           val = val * sqrt(2.d0 * pi) / dble(Z)
@@ -618,7 +618,7 @@ contains
 
   end function calc_expectation_val_cm_isospin
 
-  function calc_expectation_val_onebody_isospin(opname, params, bra_vecs, ket_vecs, isospin) result(val)
+  function calc_expectation_val_onebody_isospin(opname, params, bra_vecs, ket_vecs, isospin, op_scale, hw_op) result(val)
     use ClassSys, only: sys
     use SingleParticleState
     use OneBodyLabOps
@@ -631,7 +631,8 @@ contains
     type(str), intent(in) :: opname
     type(InputParameters), intent(in) :: params
     type(DMat), intent(in) :: bra_vecs, ket_vecs
-    integer :: isospin
+    integer, intent(in) :: isospin
+    real(8), intent(in), optional :: op_scale, hw_op
     integer :: jbra, pbra, tbra, zbra
     integer :: jket, pket, tket, zket
     type(Orbits) :: sps_pn
@@ -642,9 +643,11 @@ contains
     type(ThreeBodyJacOpChanIso) :: opjac
     type(InputParameters) :: input
     type(sys) :: s
-    real(8) :: val
+    type(str) :: fn
+    real(8) :: scale_factor, hw_operator, val
     logical :: ex, calc_bra = .true.
     integer :: A, Z, N
+    integer :: wunit=103
 
     jbra = params%jbra
     pbra = params%pbra
@@ -655,6 +658,10 @@ contains
     pket = params%pket
     tket = params%tket
     zket = params%tzket
+    scale_factor = 1.d0
+    hw_operator = params%hw
+    if(present(op_scale)) scale_factor = op_scale
+    if(present(hw_op)) hw_operator = hw_op
     if(jbra == jket .and. pbra == pket .and. tbra == tket .and. zbra==zket) calc_bra = .false.
 
     call chbra%init(params%hw,jbra,pbra,tbra,params%N3max,params%path_to_tmp_dir)
@@ -662,16 +669,10 @@ contains
 
     call sps%init(params%N3max)
     call sps_pn%init(params%N3max)
-    call op_pn%init(sps_pn, params%hw, opname)
-    if(opname%val == "Sp_M1") then
-      call op_pn%set(isospin, e_charge=2.d0/3.d0)
-    else if(s%find(opname,s%str("M_1B")) .or. s%find(opname,s%str("Tmag_1B"))) then
-      op_pn%hw = params%hw * 3.d0 / 2.d0
-      call op_pn%set(isospin)
-      op_pn%hw = params%hw
-    else
-      call op_pn%set(isospin)
-    end if
+    call op_pn%init(sps_pn, hw_operator, opname)
+    call op_pn%set(isospin)
+    call op_pn%NormalToReduced() ! 3-body embedding assumes reduced me
+    op_pn%mat = op_pn%mat * scale_factor
 
     call op%init(sps, op_pn%GetOpJ(), op_pn%GetOpP(), isospin, params%hw)
     call op%MakeIsospinSymmetric(op_pn)
