@@ -168,71 +168,38 @@ contains
     real(8), intent(in) :: pbra, pket
     integer, intent(in) :: lbra, sbra, jbra, zbra, lket, sket, jket, zket
     logical, intent(in) :: pn_formalism
-    real(8) :: r, phbra, phket, norm
-    integer :: ibra, iket
-    integer, allocatable :: z1bras(:), z2bras(:), z1kets(:), z2kets(:)
+    real(8) :: r
     type(MomFunctions) :: fq
-
-    if(zbra==-1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [-1]
-      z2bras = [-1]
-    elseif(zbra==1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [1]
-      z2bras = [1]
-    elseif(zbra==0) then
-      allocate(z1bras(2), z2bras(2))
-      z1bras = [-1,1]
-      z2bras = [1,-1]
-    end if
-
-    if(zket==-1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [-1]
-      z2kets = [-1]
-    elseif(zket==1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [1]
-      z2kets = [1]
-    elseif(zket==0) then
-      allocate(z1kets(2), z2kets(2))
-      z1kets = [-1,1]
-      z2kets = [1,-1]
-    end if
+    complex(8), parameter :: i_unit = (0.d0, 1.d0)
 
     call set_mom_functions(this, fq, pbra, pket)
     r = 0.d0
     if(pn_formalism) then
-      norm = 1.d0 / sqrt(dble(size(z1bras) * size(z1kets)) )
-      do ibra = 1, size(z1bras)
-        phbra = 1.d0
-        if(z1bras(ibra)== 1 .and. z2bras(ibra)==-1) phbra = (-1.d0)**(lbra+sbra)
-        do iket = 1, size(z1kets)
-          phket = 1.d0
-          if(z1kets(iket)== 1 .and. z2kets(iket)==-1) phket = (-1.d0)**(lket+sket)
-          fq%op(:,:,:,:) = 0.d0
-          call set_helicity_rep_pn(this, fq, pbra, pket, z1bras(ibra), z2bras(ibra), z1kets(iket), z2kets(iket))
-          r = r + this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket) * phbra * phket
-        end do
-      end do
-      r = r * norm
+      fq%op(:,:,:,:) = 0.d0
+      call set_helicity_rep_pn(this, fq, pbra, pket, lbra, sbra, zbra, lket, sket, zket)
+      r = r + this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket) 
     else
       fq%op(:,:,:,:) = 0.d0
       call set_helicity_rep_isospin(this, fq, pbra, pket, zbra, zket)
       r = this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket)
     end if
 
+    ! this is for taking into accout the additional i in the operator
+    if(mod(abs(lbra-lket),2) == 0) then
+      r = r * dble(i_unit ** (lbra-lket)) * dble(i_unit ** (lbra-lket+1)) ! skew, unit of i
+    else
+      r = r * dble(i_unit ** (lbra-lket-1)) * dble(i_unit ** (lbra-lket))  ! symmetric
+    end if
+
     call release_mom_functions(fq)
-    deallocate(z1bras, z2bras, z1kets, z2kets)
   end function calc_matrix_element
 
-  subroutine set_helicity_rep_pn(this, fq, pbra, pket, z1bra, z2bra, z1ket, z2ket)
+  subroutine set_helicity_rep_pn(this, fq, pbra, pket, lbra, sbra, zbra, lket, sket, zket)
     use MyLibrary, only: pi
     type(PTViolation), intent(in) :: this
     type(MomFunctions), intent(inout) :: fq
     real(8), intent(in) :: pbra, pket
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     integer :: ibra, iket, i
     integer :: lams_bra(2), lams_ket(2)
     real(8), allocatable :: v1(:), v2(:)
@@ -241,8 +208,8 @@ contains
     allocate(v2(this%GetNMesh()))
 
     v1(:) = 0.d0; v2(:) = 0.d0
-    call sigma_plus_q_term_pn( this, fq, v1, z1bra, z2bra, z1ket, z2ket)
-    call sigma_minus_q_term_pn(this, fq, v2, z1bra, z2bra, z1ket, z2ket)
+    call sigma_plus_q_term_pn( this, fq, v1, lbra, sbra, zbra, lket, sket, zket)
+    call sigma_minus_q_term_pn(this, fq, v2, lbra, sbra, zbra, lket, sket, zket)
 
     do ibra = 1, this%GetNumHeli()
       lams_bra = this%GetHelicities(ibra)
@@ -291,23 +258,21 @@ contains
     deallocate(v1, v2)
   end subroutine set_helicity_rep_isospin
 
-  subroutine sigma_plus_q_term_pn(this, fq, v, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: tau1_cross_tau2, tau1_dot_tau2, tau1_plus_tau2, tau1_tau2_tensor, tau_1, tau1_minus_tau2, &
-        & tau_x, tau_y, tau_z
+  subroutine sigma_plus_q_term_pn(this, fq, v, lbra, sbra, zbra, lket, sket, zket)
+    use MyLibrary
     type(PTViolation), intent(in) :: this
     type(MomFunctions), intent(in) :: fq
     real(8), intent(inout) :: v(:)
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_cross_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1) * (-1.d0)
-    t_dot   = tau1_dot_tau2(z1bra,z2bra,z1ket,z2ket,0,0,phase=-1)
-    t_plus  = tau1_plus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
-    t_tensor= 2.d0 * tau_z(z1bra,z1ket,phase=-1) * tau_z(z2bra,z2ket,phase=-1) - &
-        & tau_x(z1bra,z1ket) * tau_x(z2bra,z2ket) + tau_y(z1bra,z1ket,phase=-1) * tau_y(z2bra,z2ket,phase=-1)
-    t_1     = tau_1(z1bra,z1ket) * tau_1(z2bra,z2ket)
-    t_minus = tau1_minus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
+    t_cross = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_cross_tau2, 1, 0, phase=-1) * (-1.d0)
+    t_dot   = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_dot_tau2, 1, 0, phase=-1)
+    t_plus  = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_plus_tau2, 1, 0, phase=-1)
+    t_tensor= asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_tau2_tensor, 2, 0, phase=-1) * sqrt(6.d0)
+    t_1     = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau_identity, 0, 0, phase=-1) 
+    t_minus = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_minus_tau2, 1, 0, phase=-1) 
     call qdep_sigma_plus_q(this, fq, v, t_1, t_dot, t_plus, t_minus, t_cross, t_tensor)
   end subroutine sigma_plus_q_term_pn
 
@@ -375,23 +340,21 @@ contains
     end if
   end subroutine qdep_sigma_plus_q
 
-  subroutine sigma_minus_q_term_pn(this, fq, v, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: tau1_cross_tau2, tau1_dot_tau2, tau1_plus_tau2, tau1_tau2_tensor, tau_1, tau1_minus_tau2, &
-        & tau_x, tau_y, tau_z
+  subroutine sigma_minus_q_term_pn(this, fq, v, lbra, sbra, zbra, lket, sket, zket)
+    use MyLibrary
     type(PTViolation), intent(in) :: this
     type(MomFunctions), intent(in) :: fq
     real(8), intent(inout) :: v(:)
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_cross_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1) * (-1.d0)
-    t_dot   = tau1_dot_tau2(z1bra,z2bra,z1ket,z2ket,0,0,phase=-1)
-    t_plus  = tau1_plus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
-    t_tensor= 2.d0 * tau_z(z1bra,z1ket,phase=-1) * tau_z(z2bra,z2ket,phase=-1) - &
-        & tau_x(z1bra,z1ket) * tau_x(z2bra,z2ket) + tau_y(z1bra,z1ket,phase=-1) * tau_y(z2bra,z2ket,phase=-1)
-    t_1     = tau_1(z1bra,z1ket) * tau_1(z2bra,z2ket)
-    t_minus = tau1_minus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
+    t_cross = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_cross_tau2, 1, 0, phase=-1) * (-1.d0)
+    t_dot   = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_dot_tau2, 1, 0, phase=-1)
+    t_plus  = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_plus_tau2, 1, 0, phase=-1)
+    t_tensor= asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_tau2_tensor, 2, 0, phase=-1) * sqrt(6.d0)
+    t_1     = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau_identity, 0, 0, phase=-1) 
+    t_minus = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_minus_tau2, 1, 0, phase=-1) 
     call qdep_sigma_minus_q(this, fq, v, t_1, t_dot, t_plus, t_minus, t_cross, t_tensor)
   end subroutine sigma_minus_q_term_pn
 

@@ -64,7 +64,7 @@ ifeq ($(strip $(HOST)),other)
   endif
   FFLAGS= -O3
   CFLAGS= -O3
-  FFLAGS+= -fopenmp -fdec-math
+  FFLAGS+= -fopenmp #-fdec-math
   FFLAGS+= -DVERSION=\"$(VERSION)\"
   FLINES = -ffree-line-length-0
   FCHIRAL = $(FFLAGS)

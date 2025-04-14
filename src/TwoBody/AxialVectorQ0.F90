@@ -109,55 +109,15 @@ contains
     real(8), intent(in) :: pbra, pket
     integer, intent(in) :: lbra, sbra, jbra, zbra, lket, sket, jket, zket
     logical, intent(in) :: pn_formalism
-    real(8) :: r, phbra, phket, norm
-    integer :: ibra, iket
-    integer, allocatable :: z1bras(:), z2bras(:), z1kets(:), z2kets(:)
+    real(8) :: r
     type(MomFunctions) :: fq
-
-    if(zbra==-1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [-1]
-      z2bras = [-1]
-    elseif(zbra==1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [1]
-      z2bras = [1]
-    elseif(zbra==0) then
-      allocate(z1bras(2), z2bras(2))
-      z1bras = [-1,1]
-      z2bras = [1,-1]
-    end if
-
-    if(zket==-1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [-1]
-      z2kets = [-1]
-    elseif(zket==1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [1]
-      z2kets = [1]
-    elseif(zket==0) then
-      allocate(z1kets(2), z2kets(2))
-      z1kets = [-1,1]
-      z2kets = [1,-1]
-    end if
 
     call set_mom_functions(this, fq, pbra, pket)
     r = 0.d0
     if(pn_formalism) then
-      norm = 1.d0 / sqrt(dble(size(z1bras) * size(z1kets)) )
-      do ibra = 1, size(z1bras)
-        phbra = 1.d0
-        if(z1bras(ibra)==1 .and. z2bras(ibra)==-1) phbra = (-1.d0)**(lbra+sbra)
-        do iket = 1, size(z1kets)
-          phket = 1.d0
-          if(z1kets(iket)==1 .and. z2kets(iket)==-1) phket = (-1.d0)**(lket+sket)
-          fq%op(:,:,:,:) = 0.d0
-          call set_helicity_rep_pn(this, fq, pbra, pket, z1bras(ibra), z2bras(ibra), z1kets(iket), z2kets(iket))
-          r = r + this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket) * phbra * phket
-        end do
-      end do
-      r = r * norm
+      fq%op(:,:,:,:) = 0.d0
+      call set_helicity_rep_pn(this, fq, pbra, pket, lbra, sbra, zbra, lket, sket, zket)
+      r = r + this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket)
     else
       fq%op(:,:,:,:) = 0.d0
       call set_helicity_rep_isospin(this, fq, pbra, pket, zbra, zket)
@@ -165,15 +125,14 @@ contains
     end if
 
     call release_mom_functions(fq)
-    deallocate(z1bras, z2bras, z1kets, z2kets)
   end function calc_matrix_element
 
-  subroutine set_helicity_rep_pn(this, fq, pbra, pket, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: pi, tau1_m, tau2_m, tau1_cross_tau2, make_beta_hermitian
+  subroutine set_helicity_rep_pn(this, fq, pbra, pket, lbra, sbra, zbra, lket, sket, zket)
+    use MyLibrary
     type(AxialCurrentQ0), intent(in) :: this
     type(MomFunctions), intent(inout) :: fq
     real(8), intent(in) :: pbra, pket
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     integer :: ibra, iket, i, m, mu_Tz
     integer :: lams_bra(2), lams_ket(2)
     real(8), allocatable :: v1(:), v2(:), v3(:), v4(:)
@@ -184,13 +143,10 @@ contains
     allocate(v3(this%GetNMesh()))
     allocate(v4(this%GetNMesh()))
 
-    mu_Tz = (z1ket+z2ket-z1bra-z2bra)/2
-    tau1 = tau1_m(z1bra, z2bra, z1ket, z2ket, 1, mu_Tz, phase=-1)
-    tau2 = tau2_m(z1bra, z2bra, z1ket, z2ket, 1, mu_Tz, phase=-1)
-    tau_x_tau = tau1_cross_tau2(z1bra, z2bra, z1ket, z2ket, 1, mu_Tz, phase=-1) * (-1.d0) ! tau_x_tau = i (tau1 x tau2)
-    tau1 = make_beta_hermitian(tau1, 1, mu_Tz, normalize=.false.)
-    tau2 = make_beta_hermitian(tau2, 1, mu_Tz, normalize=.false.)
-    tau_x_tau = make_beta_hermitian(tau_x_tau, 1, mu_Tz, normalize=.false.)
+    mu_Tz = zket-zbra
+    tau1      = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_m, 1, mu_Tz, phase=-1) 
+    tau2      = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau2_m, 1, mu_Tz, phase=-1) 
+    tau_x_tau = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_cross_tau2, 1, mu_Tz, phase=-1) * (-1.d0)
 
     v1(:) = 0.d0; v2(:) = 0.d0; v3(:) = 0.d0; v4(:) = 0.d0
     call qdep_term_q( this, fq, v1 )

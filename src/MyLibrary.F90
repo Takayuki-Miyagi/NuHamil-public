@@ -8,10 +8,10 @@ module MyLibrary
   real(8), parameter, public :: hc = 197.32705d0         ! \hbar c [MeV fm] or [eV nm]
   real(8), parameter, public :: m_e = 510.9989461 ! electron mass [keV]
   real(8), parameter, public :: alpha = 137.035999d0     ! electric fine structure constant
-  real(8), parameter, public :: m_proton = 938.27231d0        ! proton mass [MeV] can be changed in LQCD calc.
-  real(8), parameter, public :: m_neutron = 939.56563d0       ! neutron mass [MeV] can be changed in LQCD calc.
-  real(8), parameter, public :: m_nucleon = 938.91897d0       ! MeV, nucleon mass
-  real(8), parameter, public :: m_red_pn = 469.45926d0        ! reduced mass of pn
+  real(8), parameter, public :: m_proton = 938.27231d0                             ! proton mass [MeV] 
+  real(8), parameter, public :: m_neutron = 939.56563d0                            ! neutron mass [MeV]
+  real(8), parameter, public :: m_nucleon = 0.5d0*(m_proton+m_neutron)             ! MeV, nucleon mass
+  real(8), parameter, public :: m_red_pn = m_proton*m_neutron/(m_proton+m_neutron) ! reduced mass of pn
   real(8), parameter, public :: g_V = 1.0d0         ! vector coupling
   real(8), parameter, public :: g_A = 1.27d0        ! axial vector coupling
   real(8), parameter, public :: g_A_GT = 1.29d0     ! axial vector coupling, corrected Goldberger–Treiman relation: g_{pi NN} = g_A M_N / f_pi
@@ -43,6 +43,9 @@ module MyLibrary
   private :: dtrinomial_func
   private :: triangle
   private :: dbinomial_func
+  private :: tau_x, tau_y, tau_z
+  !private :: tau1_tau2_tensor, tau1_dot_tau2, tau1_cross_tau2
+  !private :: tau1_m, tau2_m, tau1_minus_tau2, tau1_plus_tau2, tau_identity
 
   !
   ! C interfaces
@@ -314,7 +317,6 @@ contains
   end function triag
 
 
-#if defined(use_couplings_from_gsl)
   function dcg(j1, m1, j2, m2, j3, m3) result(s)
     !
     !  Clebsch-Gordan coefficient
@@ -352,171 +354,6 @@ contains
     real(8) :: s
     s = coupling_9j(j11,j12,j13,j21,j22,j23,j31,j32,j33)
   end function snj
-#else
-  function tjs(j1, j2, j3, m1, m2, m3) result(r)
-    real(8) :: r
-    integer, intent(in) :: j1, j2, j3, m1, m2, m3
-    r = dcg(j1,m1,j2,m2,j3,-m3) / hat(j3) * (-1.d0)**((j1-j2-m3)/2)
-  end function tjs
-
-  function dcg(j1, m1, j2, m2, j3, m3) result(s)
-    !
-    !  Clebsch-Gordan coefficient
-    !
-    !  cg_coef(j1, m1, j2, m2, j3, m3)
-    !  = ((j1)/2, (m1)/2, (j2)/2, (m2)/2 | (j3)/2, (m3)/2)
-    !
-    !  using the formula by Racah (1942)
-    !
-    implicit none
-    integer, intent(in) :: j1, j2, j3, m1, m2, m3
-    integer :: js, jm1, jm2, jm3, k1, k2, k3
-    integer :: iz, izmin, izmax, isign
-    double precision :: s
-    double precision :: tmp, delta
-
-    s = 0.0d0
-    jm1 = j1 - m1
-    jm2 = j2 - m2
-    jm3 = j3 - m3
-
-    ! error and trivial-value check
-    if (abs(m1) > j1 .or. abs(m2) > j2 .or. abs(m3) > j3 .or. &
-        & mod(jm1, 2) /= 0 .or. mod(jm2, 2) /= 0 .or. mod(jm3, 2) /= 0) then
-      write(*,*) 'error [cg_coef]: invalid j or m'
-      write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j1 =', j1, 'm1 =', m1
-      write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j2 =', j2, 'm2 =', m2
-      write(*,'(1a, 1i4, 2x, 1a, 1i4)') 'j3 =', j3, 'm3 =', m3
-      stop
-    end if
-
-    ! call triangle(j1, j2, j3, delta, info)
-    ! if (info == 1) return
-    if (max(j1, j2, j3) > n_triag) stop 'increase n_triag'
-    delta = triangle_c( j1, j2, j3 )
-    if (delta == 0.d0) return
-
-    if (m3 /= m1+m2) return
-
-    jm1 = jm1 / 2
-    jm2 = jm2 / 2
-    jm3 = jm3 / 2
-    js = (j1 + j2 + j3)/2
-    k1 = (j2 + j3 - j1)/2
-    k2 = (j3 + j1 - j2)/2
-    k3 = (j1 + j2 - j3)/2
-
-    if (max(j1, j2, j3) > n_dbinomial) stop 'increase n_dbinomial'
-    tmp = sqrt(dbinomial(j1, k2)/dbinomial(j1, jm1)) &
-        & * sqrt(dbinomial(j2, k3)/dbinomial(j2, jm2)) &
-        & * sqrt(dbinomial(j3, k1)/dbinomial(j3, jm3)) &
-        & * sqrt((j3+1.0d0)) * delta
-
-    izmin = max(0, jm1-k2, k3-jm2)
-    izmax = min(k3, jm1, j2-jm2)
-
-    if (izmax > n_dbinomial) stop 'increase n_dbinomial'
-
-    isign = (-1)**izmin
-    do iz = izmin, izmax
-      s = s + isign * dbinomial(k3,iz) * dbinomial(k2,jm1-iz) &
-          & * dbinomial(k1,j2-jm2-iz)
-      isign = isign * (-1)
-    end do
-
-    s = s * tmp
-
-  end function dcg
-
-  function sjs(j1, j2, j3, l1, l2, l3) result(s)
-    !
-    !  6j coefficient
-    !
-    !  sixj(j1, j2, j3, l1, l2, l3) = {(j1)/2 (j2)/2 (j3)/2}
-    !                                {(l1)/2 (l2)/3 (l3)/2}
-    !
-    !  see I. Talmi, Simple Models of Complex Nuclei, p. 158
-    !
-    implicit none
-    integer, intent(in) :: j1, j2, j3, l1, l2, l3
-    double precision :: s
-    double precision :: d
-    integer :: izmin, izmax, iz, isign
-    integer :: js, k1, k2, k3, jl1, jl2, jl3
-
-    s = 0.0d0
-
-    if (max(j1, j2, j3, l1, l2, l3) > n_triag) stop 'increase n_triag'
-
-    d = triangle_c(j1, j2, j3)
-    if (d == 0.d0) return
-
-    d =    triangle_c(j1, l2, l3) * triangle_c(l1, j2, l3) &
-        * triangle_c(l1, l2, j3) / d
-    if ( d == 0.d0 ) return
-
-    ! call triangle(j1, j2, j3, deltas, infos)
-    ! call triangle(j1, l2, l3, delta1, info1)
-    ! call triangle(l1, j2, l3, delta2, info2)
-    ! call triangle(l1, l2, j3, delta3, info3)
-    ! if (infos == 1 .or. info1 == 1 .or. info2 == 1 .or. info3 == 1) return
-
-    js = (j1 + j2 + j3)/2
-    k1 = (j2 + j3 - j1)/2
-    k2 = (j3 + j1 - j2)/2
-    k3 = (j1 + j2 - j3)/2
-    jl1 = (j1 + l2 + l3)/2
-    jl2 = (l1 + j2 + l3)/2
-    jl3 = (l1 + l2 + j3)/2
-
-    izmin = max(0, js, jl1, jl2, jl3)
-    izmax = min(k1+jl1, k2+jl2, k3+jl3)
-
-    if (izmax+1 > n_dbinomial) stop 'increase n_dbinomial'
-    isign = (-1)**izmin
-    do iz = izmin, izmax
-      s = s + isign * dbinomial(iz+1, iz-js) &
-          & * dbinomial(k1, iz-jl1) * dbinomial(k2, iz-jl2) &
-          & * dbinomial(k3, iz-jl3)
-      isign = isign * (-1)
-    end do
-    ! s = s * delta1 * delta2 * delta3 / deltas
-    s = s * d
-
-  end function sjs
-
-  function snj(j11, j12, j13, j21, j22, j23, j31, j32, j33) result(s)
-    !
-    !  9j coefficient
-    !
-    !  ninej(j11, j12, j13, j21, j22, j23, j31, j32, j33)
-    !
-    !    {(j11)/2 (j12)/2 (j13)/2}
-    !  = {(j21)/2 (j22)/2 (j23)/2}
-    !    {(j31)/2 (j32)/2 (j33)/2}
-    !
-    !  see I. Talmi, Simple Models of Complex Nuclei, p. 968
-    !
-    implicit none
-    integer, intent(in) :: j11, j12, j13, j21, j22, j23, j31, j32, j33
-    double precision :: s
-    integer :: k, kmin, kmax
-
-    kmin = max(abs(j11-j33), abs(j12-j23), abs(j21-j32))
-    kmax = min(j11+j33, j12+j23, j21+j32)
-
-    s = 0.0d0
-    do k = kmin, kmax, 2
-      s = s + (k+1.0d0) &
-          & * sjs(j11, j12, j13, j23, j33, k) &
-          & * sjs(j21, j22, j23, j12, k, j32) &
-          & * sjs(j31, j32, j33, k, j11, j21)
-    end do
-    s = s * (-1)**kmin
-
-  end function snj
-#endif
-
 
   !!!
   ! For HO transformation bracket
@@ -999,7 +836,7 @@ contains
     complex(8) :: ex, ei=(0.d0,1.d0)
     complex(8) :: r
     ex = cos(dble(m)*phi) + ei * sin(dble(m)*phi)
-    r = (-1.d0)**( (m-abs(m))/2 ) * assoc_legendre_spharm(l,abs(m),cth) * ex ! Condon-Shortley phase
+    r = (-1.d0)**( (m-abs(m))/2 ) * assoc_legendre_spharm(l,abs(m),cth) * ex ! This takes into account the Condon-Shortley phase too
   end function spherical_harmonics
 
   function spherical_harmonics0(l,m,cth) result(r)
@@ -1011,7 +848,7 @@ contains
     integer, intent(in) :: l, m
     real(8), intent(in) :: cth
     real(8) :: r
-    r = (-1.d0)**( (m-abs(m))/2 ) * assoc_legendre_spharm(l,abs(m),cth)
+    r = (-1.d0)**( (m-abs(m))/2 ) * assoc_legendre_spharm(l,abs(m),cth) ! This takes into account the Condon-Shortley phase too
   end function spherical_harmonics0
 
   function spherical_harmonics_unnorm(l,m,cth,phi) result(r)
@@ -1213,16 +1050,19 @@ contains
     ! < zbra| tau_{y} | zket >, i is not taken into account
     integer, intent(in) :: zbra, zket
     integer, intent(in), optional :: phase
-    real(8) :: r, ph
+    integer :: z_bra, z_ket
+    real(8) :: r
     r = 0.d0
-    ph = 1.d0
-    if(present(phase)) ph = dble(phase)
-    if(zbra==zket) then
+    z_bra = zbra; z_ket = zket;
+    if(present(phase)) then
+      z_bra = z_bra * phase; z_ket = z_ket * phase
+    end if
+    if(z_bra==z_ket) then
       r = 0.d0
-    else if(zbra==1 .and. zket==-1) then
-      r = -1.d0 * ph
-    else if(zbra==-1 .and. zket==1) then
-      r = 1.d0 * ph
+    else if(z_bra==1 .and. z_ket==-1) then
+      r = -1.d0 
+    else if(z_bra==-1 .and. z_ket==1) then
+      r = 1.d0 
     end if
   end function tau_y
 
@@ -1230,16 +1070,19 @@ contains
     ! < zbra| tau_{z} | zket >
     integer, intent(in) :: zbra, zket
     integer, intent(in), optional :: phase
-    real(8) :: r, ph
+    integer :: z_bra, z_ket
+    real(8) :: r
     r = 0.d0
-    ph = 1.d0
-    if(present(phase)) ph = dble(phase)
-    if(zbra/=zket) then
+    z_bra = zbra; z_ket = zket;
+    if(present(phase)) then
+      z_bra = z_bra * phase; z_ket = z_ket * phase
+    end if
+    if(z_bra/=z_ket) then
       r = 0.d0
-    else if(zbra== 1) then
-      r = 1.d0 * ph
-    else if(zbra==-1) then
-      r =-1.d0 * ph
+    else if(z_bra== 1) then
+      r = 1.d0 
+    else if(z_bra==-1) then
+      r =-1.d0 
     end if
   end function tau_z
 
@@ -1295,6 +1138,16 @@ contains
     r = -sqrt(2.d0) * tau1_tau2_tensor(z1bra,z2bra,z1ket,z2ket,1,m,phase=phase)
   end function tau1_cross_tau2
 
+  function tau_identity(z1bra, z2bra, z1ket, z2ket, rank, m, phase) result(r)
+    !
+    ! <z1bra, z2bra | 1 | z1ket, z2ket >
+    !
+    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket, rank, m
+    integer, intent(in), optional :: phase
+    real(8) :: r
+    r = tau_1(z1bra,z1ket)*tau_1(z2bra,z2ket)
+  end function tau_identity
+
   function tau1_m(z1bra, z2bra, z1ket, z2ket, rank, m, phase) result(r)
     !
     ! <z1bra, z2bra | tau1_m | z1ket, z2ket >
@@ -1307,7 +1160,7 @@ contains
 
   function tau2_m(z1bra, z2bra, z1ket, z2ket, rank, m, phase) result(r)
     !
-    ! <z1bra, z2bra | tau1_m | z1ket, z2ket >
+    ! <z1bra, z2bra | tau2_m | z1ket, z2ket >
     !
     integer, intent(in) :: z1bra, z2bra, z1ket, z2ket, rank, m
     integer, intent(in), optional :: phase
@@ -1336,6 +1189,9 @@ contains
   end function tau1_plus_tau2
 
   function asym_isospin_func_pn(lbra,sbra,zbra,lket,sket,zket,func,rank,m,phase) result(r)
+    ! phase= 1:  nuclear physics convention, i.e., (| 1,-1> + (-1)^(l+S)|-1, 1>) / sqrt(2)
+    ! phase=-1: particle physics convention, i.e., (|-1, 1> + (-1)^(l+S)| 1,-1>) / sqrt(2)
+    ! proton = -1 and neutron = 1 
     interface
       function func(z1bra, z2bra, z1ket, z2ket, rank, m, phase) result(r)
         integer, intent(in) :: z1bra, z2bra, z1ket, z2ket, rank, m
@@ -1354,12 +1210,12 @@ contains
     r = 0.d0
     do ibra = 1, size(z1bra)
       ph_bra = 1.d0
-      if(z1bra(ibra)== 1 .and. z2bra(ibra)==-1) ph_bra = (-1.d0)**(lbra+sbra)
+      if(z1bra(ibra)== -phase .and. z2bra(ibra)== phase) ph_bra = (-1.d0)**(lbra+sbra)
       do iket = 1, size(z1ket)
         ph_ket = 1.d0
-        if(z1ket(iket)== 1 .and. z2ket(iket)==-1) ph_ket = (-1.d0)**(lket+sket)
+        if(z1ket(iket)== -phase .and. z2ket(iket)== phase) ph_ket = (-1.d0)**(lket+sket)
         tmp = func(z1bra(ibra),z2bra(ibra),z1ket(iket),z2ket(iket),rank,m,phase) * ph_bra*ph_ket
-        tmp = make_beta_hermitian(tmp, rank, m, normalize=.true.)
+        tmp = make_beta_hermitian(tmp, rank, m, normalize=.false.)
         r = r + tmp
       end do
     end do
@@ -1369,7 +1225,7 @@ contains
     subroutine pn_combinations()
       if(zbra==-1) then
         allocate(z1bra(1), z2bra(1))
-        z1bra = [-1]
+        z1bra = [-1] 
         z2bra = [-1]
       else if(zbra==1) then
         allocate(z1bra(1), z2bra(1))
@@ -1409,7 +1265,7 @@ contains
     logical, intent(in), optional :: normalize
     logical :: norm
     real(8) :: res
-    norm = .true.
+    norm = .false.
     if(present(normalize)) norm = normalize
     res = me
     if(.not. Make_BetaDecay_Hermitian) return

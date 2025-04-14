@@ -1,4 +1,4 @@
-! Important note: after the partial-wave decomposition all the matrix elements are given in unit of (-i)
+! Important note: after the partial-wave decomposition all the matrix elements are given in unit of i
 ! Reference:
 ! [1] J. de Vries, E. Epelbaum, L. Girlanda, A. Gnech, E. Mereghetti, and M. Viviani, Front. Phys. 8, (2020).
 !
@@ -76,25 +76,25 @@ contains
     write(*,"(a,f8.4,a,f8.4,a,f8.4,a,f8.4,a)") "# c1= ", this%c1, " GeV-1, c2= ", &
       & this%c2, " GeV-1, c3=", this%c3, " GeV-1, c4= ", this%c4, " GeV-1"
     if(this%meson_exchange) then
-      write(*,'(a, f8.4)') "#    hpi1 = ", this%pv_couplings(1)
-      write(*,'(a, f8.4)') "#   hrho0 = ", this%pv_couplings(2)
-      write(*,'(a, f8.4)') "#   hrho1 = ", this%pv_couplings(3)
-      write(*,'(a, f8.4)') "#  hrho1' = ", this%pv_couplings(4)
-      write(*,'(a, f8.4)') "#   hrho2 = ", this%pv_couplings(5)
-      write(*,'(a, f8.4)') "# homega0 = ", this%pv_couplings(6)
-      write(*,'(a, f8.4)') "# homega1 = ", this%pv_couplings(7)
+      write(*,'(a, es12.4)') "#    hpi1 = ", this%pv_couplings(1)
+      write(*,'(a, es12.4)') "#   hrho0 = ", this%pv_couplings(2)
+      write(*,'(a, es12.4)') "#   hrho1 = ", this%pv_couplings(3)
+      write(*,'(a, es12.4)') "#  hrho1' = ", this%pv_couplings(4)
+      write(*,'(a, es12.4)') "#   hrho2 = ", this%pv_couplings(5)
+      write(*,'(a, es12.4)') "# homega0 = ", this%pv_couplings(6)
+      write(*,'(a, es12.4)') "# homega1 = ", this%pv_couplings(7)
     else
-      write(*,'(a, f8.4)') "# hpi1 = ", this%pv_couplings( 1)
-      write(*,'(a, f8.4)') "#  Ct1 = ", this%pv_couplings( 2)
-      write(*,'(a, f8.4)') "#  Ct2 = ", this%pv_couplings( 3)
-      write(*,'(a, f8.4)') "#  Ct3 = ", this%pv_couplings( 4)
-      write(*,'(a, f8.4)') "#  Ct4 = ", this%pv_couplings( 5)
-      write(*,'(a, f8.4)') "#  Ct5 = ", this%pv_couplings( 6)
-      write(*,'(a, f8.4)') "#  hV0 = ", this%pv_couplings( 7)
-      write(*,'(a, f8.4)') "#  hV1 = ", this%pv_couplings( 8)
-      write(*,'(a, f8.4)') "#  hV2 = ", this%pv_couplings( 9)
-      write(*,'(a, f8.4)') "#  hA1 = ", this%pv_couplings(10)
-      write(*,'(a, f8.4)') "#  hA2 = ", this%pv_couplings(11)
+      write(*,'(a, es12.4)') "# hpi1 = ", this%pv_couplings( 1)
+      write(*,'(a, es12.4)') "#  Ct1 = ", this%pv_couplings( 2)
+      write(*,'(a, es12.4)') "#  Ct2 = ", this%pv_couplings( 3)
+      write(*,'(a, es12.4)') "#  Ct3 = ", this%pv_couplings( 4)
+      write(*,'(a, es12.4)') "#  Ct4 = ", this%pv_couplings( 5)
+      write(*,'(a, es12.4)') "#  Ct5 = ", this%pv_couplings( 6)
+      write(*,'(a, es12.4)') "#  hV0 = ", this%pv_couplings( 7)
+      write(*,'(a, es12.4)') "#  hV1 = ", this%pv_couplings( 8)
+      write(*,'(a, es12.4)') "#  hV2 = ", this%pv_couplings( 9)
+      write(*,'(a, es12.4)') "#  hA1 = ", this%pv_couplings(10)
+      write(*,'(a, es12.4)') "#  hA2 = ", this%pv_couplings(11)
     end if
     write(*,*)
     call this%show_pwd_options()
@@ -169,55 +169,15 @@ contains
     real(8), intent(in) :: pbra, pket
     integer, intent(in) :: lbra, sbra, jbra, zbra, lket, sket, jket, zket
     logical, intent(in) :: pn_formalism
-    real(8) :: r, phbra, phket, norm
-    integer :: ibra, iket
-    integer, allocatable :: z1bras(:), z2bras(:), z1kets(:), z2kets(:)
+    real(8) :: r
     type(MomFunctions) :: fq
-
-    if(zbra==-1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [-1]
-      z2bras = [-1]
-    elseif(zbra==1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [1]
-      z2bras = [1]
-    elseif(zbra==0) then
-      allocate(z1bras(2), z2bras(2))
-      z1bras = [-1,1]
-      z2bras = [1,-1]
-    end if
-
-    if(zket==-1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [-1]
-      z2kets = [-1]
-    elseif(zket==1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [1]
-      z2kets = [1]
-    elseif(zket==0) then
-      allocate(z1kets(2), z2kets(2))
-      z1kets = [-1,1]
-      z2kets = [1,-1]
-    end if
 
     call set_mom_functions(this, fq, pbra, pket)
     r = 0.d0
     if(pn_formalism) then
-      norm = 1.d0 / sqrt(dble(size(z1bras) * size(z1kets)) )
-      do ibra = 1, size(z1bras)
-        phbra = 1.d0
-        if(z1bras(ibra)== 1 .and. z2bras(ibra)==-1) phbra = (-1.d0)**(lbra+sbra)
-        do iket = 1, size(z1kets)
-          phket = 1.d0
-          if(z1kets(iket)== 1 .and. z2kets(iket)==-1) phket = (-1.d0)**(lket+sket)
-          fq%op(:,:,:,:) = 0.d0
-          call set_helicity_rep_pn(this, fq, pbra, pket, z1bras(ibra), z2bras(ibra), z1kets(iket), z2kets(iket))
-          r = r + this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket) * phbra * phket
-        end do
-      end do
-      r = r * norm
+      fq%op(:,:,:,:) = 0.d0
+      call set_helicity_rep_pn(this, fq, pbra, pket, lbra, sbra, zbra, lket, sket, zket)
+      r = r + this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket) 
     else
       fq%op(:,:,:,:) = 0.d0
       call set_helicity_rep_isospin(this, fq, pbra, pket, zbra, zket)
@@ -225,15 +185,14 @@ contains
     end if
 
     call release_mom_functions(fq)
-    deallocate(z1bras, z2bras, z1kets, z2kets)
   end function calc_matrix_element
 
-  subroutine set_helicity_rep_pn(this, fq, pbra, pket, z1bra, z2bra, z1ket, z2ket)
+  subroutine set_helicity_rep_pn(this, fq, pbra, pket, lbra, sbra, zbra, lket, sket, zket)
     use MyLibrary, only: pi
     type(PViolation), intent(in) :: this
     type(MomFunctions), intent(inout) :: fq
     real(8), intent(in) :: pbra, pket
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     integer :: ibra, iket, i
     integer :: lams_bra(2), lams_ket(2)
     real(8), allocatable :: v1(:), v2(:), v3(:), v4(:)
@@ -244,10 +203,10 @@ contains
     allocate(v4(this%GetNMesh()))
 
     v1(:) = 0.d0; v2(:) = 0.d0; v3(:) = 0.d0; v4(:) = 0.d0
-    call sigma_plus_q_term_pn(  this, fq, v1, z1bra, z2bra, z1ket, z2ket)
-    call sigma_cross_q_term_pn( this, fq, v2, z1bra, z2bra, z1ket, z2ket)
-    call sigma_minus_QQ_term_pn(this, fq, v3, z1bra, z2bra, z1ket, z2ket)
-    call sigma_plus_QQ_term_pn( this, fq, v4, z1bra, z2bra, z1ket, z2ket)
+    call sigma_plus_q_term_pn(  this, fq, v1, lbra, sbra, zbra, lket, sket, zket)
+    call sigma_cross_q_term_pn( this, fq, v2, lbra, sbra, zbra, lket, sket, zket)
+    call sigma_minus_QQ_term_pn(this, fq, v3, lbra, sbra, zbra, lket, sket, zket)
+    call sigma_plus_QQ_term_pn( this, fq, v4, lbra, sbra, zbra, lket, sket, zket)
 
     do ibra = 1, this%GetNumHeli()
       lams_bra = this%GetHelicities(ibra)
@@ -256,8 +215,8 @@ contains
         do i = 1, this%GetNMesh()
           fq%op(i,0,ibra,iket) = v1(i) * sigma_plus_q(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i) + &
               & v2(i) * sigma_cross_q( lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i) + &
-              & v3(i) * sigma_minus_QQ(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i) + &
-              & v4(i) * sigma_plus_QQ( lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i)
+              & v3(i) * sigma_minus_QQ(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i)*0.5d0 + &
+              & v4(i) * sigma_plus_QQ( lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i)*0.5d0
         end do
       end do
     end do
@@ -293,10 +252,9 @@ contains
         lams_ket = this%GetHelicities(iket)
         do i = 1, this%GetNMesh()
           fq%op(i,0,ibra,iket) = v1(i) * sigma_plus_q(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i) + &
-              & v2(i) * sigma_cross_q( lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i)*(-1.d0) + &
-              & v3(i) * sigma_minus_QQ(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i) + &
-              & v4(i) * sigma_plus_QQ( lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i)
-          ! -1 of sigma_cross_q is from i^2
+              & v2(i) * sigma_cross_q( lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i) + &
+              & v3(i) * sigma_minus_QQ(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i)*0.5d0 + &
+              & v4(i) * sigma_plus_QQ( lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, i)*0.5d0
         end do
       end do
     end do
@@ -305,24 +263,21 @@ contains
     deallocate(v1, v2, v3, v4)
   end subroutine set_helicity_rep_isospin
 
-  subroutine sigma_plus_q_term_pn(this, fq, v, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: tau1_cross_tau2, tau1_dot_tau2, tau1_plus_tau2, tau1_tau2_tensor, tau_1, tau1_minus_tau2, &
-        & tau_x, tau_y, tau_z
+  subroutine sigma_plus_q_term_pn(this, fq, v, lbra, sbra, zbra, lket, sket, zket)
+    use MyLibrary
     type(PViolation), intent(in) :: this
     type(MomFunctions), intent(in) :: fq
     real(8), intent(inout) :: v(:)
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_cross_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1) * (-1.d0) ! -1 is from i^2
-    t_dot   = tau1_dot_tau2(z1bra,z2bra,z1ket,z2ket,0,0,phase=-1)
-    t_plus  = tau1_plus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
-    !t_tensor= tau1_tau2_tensor(z1bra,z2bra,z1ket,z2ket,2,0,phase=-1)
-    t_tensor= 2.d0 * tau_z(z1bra,z1ket,phase=-1) * tau_z(z2bra,z2ket,phase=-1) - &
-        & tau_x(z1bra,z1ket) * tau_x(z2bra,z2ket) + tau_y(z1bra,z1ket,phase=-1) * tau_y(z2bra,z2ket,phase=-1)
-    t_1     = tau_1(z1bra,z1ket) * tau_1(z2bra,z2ket)
-    t_minus = tau1_minus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
+    t_cross = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_cross_tau2, 1, 0, phase=-1) * (-1.d0)
+    t_dot   = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_dot_tau2, 1, 0, phase=-1)
+    t_plus  = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_plus_tau2, 1, 0, phase=-1)
+    t_tensor= asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_tau2_tensor, 2, 0, phase=-1) * sqrt(6.d0)
+    t_1     = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau_identity, 0, 0, phase=-1) 
+    t_minus = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_minus_tau2, 1, 0, phase=-1) 
     call qdep_sigma_plus_q(this, fq, v, t_1, t_dot, t_plus, t_minus, t_cross, t_tensor)
   end subroutine sigma_plus_q_term_pn
 
@@ -335,7 +290,7 @@ contains
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_tau2_tensor_iso(tbra,tket,1) * (-sqrt(2.d0)) * (-1.d0) ! -1 is from i^2
+    t_cross = tau1_tau2_tensor_iso(tbra,tket,1) * (-sqrt(2.d0)) * (-1.d0) ! -1 is from particle -> nuclear physics convention
     t_dot   = tau1_tau2_tensor_iso(tbra,tket,0) * (-sqrt(3.d0))
     t_tensor= tau1_tau2_tensor_iso(tbra,tket,2) * sqrt(6.d0)
     t_1     = tau_identity_iso(tbra,tket)
@@ -356,22 +311,22 @@ contains
       do i = 1, this%GetNMesh()
         ! Note there is the sign difference in pion contribution, see [1] C. H. Hyun and B. Desplanques, Phys. Lett. B 552, 41 (2003).
         v(i) = v(i) - g_pi * this%pv_couplings(1) / (sqrt(8.d0) * m_nucleon) * t_cross * fq%pi_prop(i)
-        v(i) = v(i) - g_rho * this%pv_couplings(4) / (2.d0 * m_nucleon) * t_cross * fq%rho_prop(i)
+        v(i) = v(i) + g_rho * this%pv_couplings(4) / (2.d0 * m_nucleon) * t_cross * fq%rho_prop(i)
       end do
     else
       do i = 1, this%GetNMesh()
-        v(i) = v(i) + g_A * this%pv_couplings(1) / (sqrt(8.d0) * f_pi) * t_cross * fq%pi_prop(i)
+        v(i) = v(i) - g_A * this%pv_couplings(1) / (sqrt(8.d0) * f_pi) * t_cross * fq%pi_prop(i)
       end do
       if(this%ch_order < 1) return
 
       ! Contact
       do i = 1, this%GetNMesh()
-        v(i) = v(i) + this%pv_couplings(4) / (Lambda_chi * Lambda_chi * f_pi) * t_cross
+        v(i) = v(i) - this%pv_couplings(4) / (Lambda_chi * Lambda_chi * f_pi) * t_cross
       end do
 
       ! Two-Pion Exchange
       do i = 1, this%GetNMesh()
-        v(i) = v(i) - g_A * this%pv_couplings(1) / (sqrt(8.d0) * f_pi * Lambda_chi**2) * &
+        v(i) = v(i) + g_A * this%pv_couplings(1) / (sqrt(8.d0) * f_pi * Lambda_chi**2) * &
             & t_cross * fq%loop_L(i) - &
             & g_A**3 * this%pv_couplings(1) /(sqrt(8.d0) * f_pi * Lambda_chi**2) * &
             & t_cross * ( fq%loop_H(i) - 3.d0*fq%loop_L(i) )
@@ -380,30 +335,27 @@ contains
       if(this%ch_order < 2) return
       ! Two-Pion Exchange
       do i = 1, this%GetNMesh()
-        v(i) = v(i) - g_A**3 * pi * this%pv_couplings(8) * 0.25d0 / (f_pi**2 * Lambda_chi**2) * t_cross * &
+        v(i) = v(i) + g_A**3 * pi * this%pv_couplings(8) * 0.25d0 / (f_pi**2 * Lambda_chi**2) * t_cross * &
             & (1.d0 - 2.d0 * m_pi**2 / fq%s_var(i)**2) * fq%s_var(i)**2 * fq%loop_A(i)
       end do
     end if
   end subroutine qdep_sigma_plus_q
 
-  subroutine sigma_cross_q_term_pn(this, fq, v, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: tau1_cross_tau2, tau1_dot_tau2, tau1_plus_tau2, tau1_tau2_tensor, tau_1, tau1_minus_tau2, &
-        & tau_x, tau_y, tau_z
+  subroutine sigma_cross_q_term_pn(this, fq, v, lbra, sbra, zbra, lket, sket, zket)
+    use MyLibrary
     type(PViolation), intent(in) :: this
     type(MomFunctions), intent(in) :: fq
     real(8), intent(inout) :: v(:)
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_cross_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1) * (-1.d0) ! -1 is from i^2
-    t_dot   = tau1_dot_tau2(z1bra,z2bra,z1ket,z2ket,0,0,phase=-1)
-    t_plus  = tau1_plus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
-    !t_tensor= tau1_tau2_tensor(z1bra,z2bra,z1ket,z2ket,2,0,phase=-1)
-    t_tensor= 2.d0 * tau_z(z1bra,z1ket,phase=-1) * tau_z(z2bra,z2ket,phase=-1) - &
-        & tau_x(z1bra,z1ket) * tau_x(z2bra,z2ket) + tau_y(z1bra,z1ket,phase=-1) * tau_y(z2bra,z2ket,phase=-1)
-    t_1     = tau_1(z1bra,z1ket) * tau_1(z2bra,z2ket)
-    t_minus = tau1_minus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
+    t_cross = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_cross_tau2, 1, 0, phase=-1) * (-1.d0)
+    t_dot   = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_dot_tau2, 1, 0, phase=-1)
+    t_plus  = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_plus_tau2, 1, 0, phase=-1)
+    t_tensor= asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_tau2_tensor, 2, 0, phase=-1) * sqrt(6.d0)
+    t_1     = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau_identity, 0, 0, phase=-1) 
+    t_minus = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_minus_tau2, 1, 0, phase=-1) 
     call qdep_sigma_cross_q(this, fq, v, t_1, t_dot, t_plus, t_minus, t_cross, t_tensor)
   end subroutine sigma_cross_q_term_pn
 
@@ -416,7 +368,7 @@ contains
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_tau2_tensor_iso(tbra,tket,1) * (-sqrt(2.d0)) * (-1.d0) ! -1 is from i^2
+    t_cross = tau1_tau2_tensor_iso(tbra,tket,1) * (-sqrt(2.d0)) * (-1.d0) ! -1 is from particle -> nuclear physics convention
     t_dot   = tau1_tau2_tensor_iso(tbra,tket,0) * (-sqrt(3.d0))
     t_tensor= tau1_tau2_tensor_iso(tbra,tket,2) * sqrt(6.d0)
     t_1     = tau_identity_iso(tbra,tket)
@@ -470,24 +422,21 @@ contains
     end if
   end subroutine qdep_sigma_cross_q
 
-  subroutine sigma_minus_QQ_term_pn(this, fq, v, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: tau1_cross_tau2, tau1_dot_tau2, tau1_plus_tau2, tau1_tau2_tensor, tau_1, tau1_minus_tau2, &
-        & tau_x, tau_y, tau_z
+  subroutine sigma_minus_QQ_term_pn(this, fq, v, lbra, sbra, zbra, lket, sket, zket)
+    use MyLibrary
     type(PViolation), intent(in) :: this
     type(MomFunctions), intent(in) :: fq
     real(8), intent(inout) :: v(:)
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_cross_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1) * (-1.d0) ! -1 is from i^2
-    t_dot   = tau1_dot_tau2(z1bra,z2bra,z1ket,z2ket,0,0,phase=-1)
-    t_plus  = tau1_plus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
-    !t_tensor= tau1_tau2_tensor(z1bra,z2bra,z1ket,z2ket,2,0,phase=-1)
-    t_tensor= 2.d0 * tau_z(z1bra,z1ket,phase=-1) * tau_z(z2bra,z2ket,phase=-1) - &
-        & tau_x(z1bra,z1ket) * tau_x(z2bra,z2ket) + tau_y(z1bra,z1ket,phase=-1) * tau_y(z2bra,z2ket,phase=-1)
-    t_1     = tau_1(z1bra,z1ket) * tau_1(z2bra,z2ket)
-    t_minus = tau1_minus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
+    t_cross = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_cross_tau2, 1, 0, phase=-1) * (-1.d0)
+    t_dot   = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_dot_tau2, 1, 0, phase=-1)
+    t_plus  = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_plus_tau2, 1, 0, phase=-1)
+    t_tensor= asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_tau2_tensor, 2, 0, phase=-1) * sqrt(6.d0)
+    t_1     = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau_identity, 0, 0, phase=-1) 
+    t_minus = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_minus_tau2, 1, 0, phase=-1) 
     call qdep_sigma_minus_QQ(this, fq, v, t_1, t_dot, t_plus, t_minus, t_cross, t_tensor)
   end subroutine sigma_minus_QQ_term_pn
 
@@ -500,7 +449,7 @@ contains
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_tau2_tensor_iso(tbra,tket,1) * (-sqrt(2.d0)) * (-1.d0) ! -1 is from i^2
+    t_cross = tau1_tau2_tensor_iso(tbra,tket,1) * (-sqrt(2.d0)) * (-1.d0) ! -1 is from particle -> nuclear physics convention
     t_dot   = tau1_tau2_tensor_iso(tbra,tket,0) * (-sqrt(3.d0))
     t_tensor= tau1_tau2_tensor_iso(tbra,tket,2) * sqrt(6.d0)
     t_1     = tau_identity_iso(tbra,tket)
@@ -530,24 +479,21 @@ contains
     end if
   end subroutine qdep_sigma_minus_QQ
 
-  subroutine sigma_plus_QQ_term_pn(this, fq, v, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: tau1_cross_tau2, tau1_dot_tau2, tau1_plus_tau2, tau1_tau2_tensor, tau_1, tau1_minus_tau2, &
-        & tau_x, tau_y, tau_z
+  subroutine sigma_plus_QQ_term_pn(this, fq, v, lbra, sbra, zbra, lket, sket, zket)
+    use MyLibrary
     type(PViolation), intent(in) :: this
     type(MomFunctions), intent(in) :: fq
     real(8), intent(inout) :: v(:)
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_cross_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1) * (-1.d0) ! -1 is from i^2
-    t_dot   = tau1_dot_tau2(z1bra,z2bra,z1ket,z2ket,0,0,phase=-1)
-    t_plus  = tau1_plus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
-    !t_tensor= tau1_tau2_tensor(z1bra,z2bra,z1ket,z2ket,2,0,phase=-1)
-    t_tensor= 2.d0 * tau_z(z1bra,z1ket,phase=-1) * tau_z(z2bra,z2ket,phase=-1) - &
-        & tau_x(z1bra,z1ket) * tau_x(z2bra,z2ket) + tau_y(z1bra,z1ket,phase=-1) * tau_y(z2bra,z2ket,phase=-1)
-    t_1     = tau_1(z1bra,z1ket) * tau_1(z2bra,z2ket)
-    t_minus = tau1_minus_tau2(z1bra,z2bra,z1ket,z2ket,1,0,phase=-1)
+    t_cross = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_cross_tau2, 1, 0, phase=-1) * (-1.d0)
+    t_dot   = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_dot_tau2, 1, 0, phase=-1)
+    t_plus  = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_plus_tau2, 1, 0, phase=-1)
+    t_tensor= asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_tau2_tensor, 2, 0, phase=-1) * sqrt(6.d0)
+    t_1     = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau_identity, 0, 0, phase=-1) 
+    t_minus = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_minus_tau2, 1, 0, phase=-1) 
     call qdep_sigma_plus_QQ(this, fq, v, t_1, t_dot, t_plus, t_minus, t_cross, t_tensor)
   end subroutine sigma_plus_QQ_term_pn
 
@@ -560,7 +506,7 @@ contains
     real(8) :: t_cross, t_dot, t_plus, t_tensor, t_1, t_minus
     integer :: i
 
-    t_cross = tau1_tau2_tensor_iso(tbra,tket,1) * (-sqrt(2.d0)) * (-1.d0) ! -1 is from i^2
+    t_cross = tau1_tau2_tensor_iso(tbra,tket,1) * (-sqrt(2.d0)) * (-1.d0) ! -1 is from particle -> nuclear physics convention
     t_dot   = tau1_tau2_tensor_iso(tbra,tket,0) * (-sqrt(3.d0))
     t_tensor= tau1_tau2_tensor_iso(tbra,tket,2) * sqrt(6.d0)
     t_1     = tau_identity_iso(tbra,tket)

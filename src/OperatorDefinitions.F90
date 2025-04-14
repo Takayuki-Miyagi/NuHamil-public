@@ -26,6 +26,7 @@ module OperatorDefinitions
     logical, private :: reduced_matrix_element = .true.
     logical, private :: subtract_onebody=.false.
     logical, private :: channel_restriction=.true.
+    logical, private :: skew = .false.
     real(8), private :: op_args(6)
   contains
     procedure :: InitOperatorDefFromJPT
@@ -38,6 +39,7 @@ module OperatorDefinitions
     procedure :: GetOpZ
     procedure :: GetQ
     procedure :: GetSubtract
+    procedure :: IsSkew
     procedure :: SetOpJ
     procedure :: SetOpP
     procedure :: SetOpT
@@ -45,6 +47,7 @@ module OperatorDefinitions
     procedure :: SetQ
     procedure :: SetOpName
     procedure :: SetSubtract
+    procedure :: SetSkewness
     procedure :: pn
     procedure :: reduced_me
     procedure :: SetReduced
@@ -167,6 +170,12 @@ contains
     r = this%subtract_onebody
   end function GetSubtract
 
+  function IsSkew(this) result(r)
+    class(OperatorDef), intent(in) :: this
+    logical :: r
+    r = this%skew
+  end function IsSkew
+
   subroutine SetOpJ(this,J)
     class(OperatorDef), intent(inout) :: this
     integer, intent(in) :: J
@@ -203,6 +212,12 @@ contains
     this%subtract_onebody = subtract
   end subroutine SetSubtract
 
+  subroutine SetSkewness(this,skew)
+    class(OperatorDef), intent(inout) :: this
+    logical, intent(in) :: skew
+    this%skew = skew
+  end subroutine SetSkewness
+
   function pn(this)
     class(OperatorDef), intent(in) :: this
     logical :: pn
@@ -232,10 +247,12 @@ contains
     class(OperatorDef), intent(inout) :: this
     type(str) :: OpName
     type(str), allocatable :: strings(:)
+    type(str) :: tmp
     type(sys) :: s
     integer :: J_read
     real(8) :: Q_read
 
+    this%skew = .false.
     select case(this%opname%val)
 
     case('Hamil','hamil', "NNint", "NNNint", &
@@ -249,14 +266,14 @@ contains
       this%zr = 0
       this%reduced_matrix_element = .false.
       this%channel_restriction=.true.
-    case('kinetic','Kinetic','hopot','HOpot', "Hcm", "HOHamil", &
-          &"T_l0", "T_radial", "T_Gj", "T_Gl", 'R2','r2')
+    case('kinetic','Kinetic','hopot','HOpot', "HCM", "HOHamil", &
+          &"T_l0", "T_radial", "T_Gj", "T_Gl", 'R2','r2', 'PCM0', 'Rp2so', 'Rp2', 'Rp4')
       this%jr = 0
       this%pr = 1
       this%zr = 0
       this%reduced_matrix_element = .false.
       this%channel_restriction=.false.
-    case('Sigma','Sigma_Tauz','Spin')
+    case('Sigma','Sigma_Tauz','Spin', 'Orb_L')
       this%jr = 1
       this%pr = 1
       this%zr = 0
@@ -279,16 +296,22 @@ contains
       this%zr = 0
       this%subtract_onebody=.false.
       this%channel_restriction=.false.
-    case('E1',"TDM_mag", "TDM_conv","E1cm")
+    case('E1',"E1cm")
       this%jr = 1
       this%pr = -1
       this%zr = 0
       this%channel_restriction=.false.
+    case("TDM_mag", "TDM_conv")
+      this%jr = 1
+      this%pr = -1
+      this%zr = 0
+      this%channel_restriction=.false.
+      this%skew = .true.
     case("GamowTeller")
       this%jr = 1
       this%pr = 1
       this%zr = 1
-      !this%subtract_onebody=.true.
+      this%subtract_onebody=.true.
       this%channel_restriction=.false.
     case("Fermi")
       this%jr = 0
@@ -317,6 +340,28 @@ contains
         return
       end if
 
+      if( s%find(this%OpName,s%str("Sp_L_M"))) then
+        OpName = this%OpName
+        call s%split(OpName, s%str("Sp_L_M"), strings)
+        read(strings(2)%val,*) J_read
+        this%jr = J_read
+        this%pr = (-1)**(J_read+1)
+        this%zr = 0
+        this%reduced_matrix_element = .true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str("Sp_S_M"))) then
+        OpName = this%OpName
+        call s%split(OpName, s%str("Sp_S_M"), strings)
+        read(strings(2)%val,*) J_read
+        this%jr = J_read
+        this%pr = (-1)**(J_read+1)
+        this%zr = 0
+        this%reduced_matrix_element = .true.
+        return
+      end if
+
       if( s%find(this%OpName,s%str("Sp_M"))) then
         OpName = this%OpName
         call s%split(OpName, s%str("Sp_M"), strings)
@@ -328,10 +373,11 @@ contains
         return
       end if
 
+
       if( s%find(this%OpName,s%str('M5_'))) then
         ! format example:
         !   M5_1B_J0_Tz0_Q10
-        !   M5_2B_J0_Tz0_Q10
+        !   M5_2B_J0_Tz0_Q10-N2LO-NonLocal2-500
 
         OpName = this%OpName
         call s%split(OpName, s%str("_"), strings)
@@ -340,35 +386,19 @@ contains
         this%pr = (-1)**(J_read+1)
         read(strings(4)%val(3:),*) J_read
         this%zr = J_read
-        read(strings(5)%val(2:),*) Q_read
+        tmp = strings(5)
+        call s%split(tmp, s%str("-"), strings)
+        read(strings(1)%val(2:),*) Q_read
         this%Q = Q_read
         this%reduced_matrix_element = .true.
+        this%skew = .true.
         return
       end if
-
-      if( s%find(this%OpName,s%str('M_'))) then
-        ! format example:
-        !   M_1B_J0_Tz0_Q10
-        !   M_2B_J0_Tz0_Q10
-
-        OpName = this%OpName
-        call s%split(OpName, s%str("_"), strings)
-        read(strings(3)%val(2:),*) J_read
-        this%jr = J_read
-        this%pr = (-1)**J_read
-        read(strings(4)%val(3:),*) J_read
-        this%zr = J_read
-        read(strings(5)%val(2:),*) Q_read
-        this%Q = Q_read
-        this%reduced_matrix_element = .true.
-        return
-      end if
-
 
       if( s%find(this%OpName,s%str('L5_'))) then
         ! format example:
         !   L5_1B_J1_Tz0_Q10
-        !   L5_2B_J1_Tz0_Q10
+        !   L5_2B_J0_Tz0_Q10-N2LO-NonLocal2-500
 
         OpName = this%OpName
         call s%split(OpName, s%str("_"), strings)
@@ -377,59 +407,9 @@ contains
         this%pr = (-1)**(J_read+1)
         read(strings(4)%val(3:),*) J_read
         this%zr = J_read
-        read(strings(5)%val(2:),*) Q_read
-        this%Q = Q_read
-        this%reduced_matrix_element = .true.
-        return
-      end if
-
-      if( s%find(this%OpName,s%str('L_'))) then
-        ! format example:
-        !   L_1B_J1_Tz0_Q10
-        !   L_2B_J1_Tz0_Q10
-
-        OpName = this%OpName
-        call s%split(OpName, s%str("_"), strings)
-        read(strings(3)%val(2:),*) J_read
-        this%jr = J_read
-        this%pr = (-1)**J_read
-        read(strings(4)%val(3:),*) J_read
-        this%zr = J_read
-        read(strings(5)%val(2:),*) Q_read
-        this%Q = Q_read
-        this%reduced_matrix_element = .true.
-        return
-      end if
-
-      if( s%find(this%OpName,s%str('Tel_'))) then
-        ! format example:
-        !   Tel_1B_J1_Tz0_Q10
-        !   Tel_2B_J1_Tz0_Q10
-        OpName = this%OpName
-        call s%split(OpName, s%str("_"), strings)
-        read(strings(3)%val(2:),*) J_read
-        this%jr = J_read
-        this%pr = (-1)**J_read
-        read(strings(4)%val(3:),*) J_read
-        this%zr = J_read
-        read(strings(5)%val(2:),*) Q_read
-        this%Q = Q_read
-        this%reduced_matrix_element = .true.
-        return
-      end if
-
-      if( s%find(this%OpName,s%str('Tmag_'))) then
-        ! format example:
-        !   Tmag_1B_J1_Tz0_Q10
-        !   Tmag_2B_J1_Tz0_Q10
-        OpName = this%OpName
-        call s%split(OpName, s%str("_"), strings)
-        read(strings(3)%val(2:),*) J_read
-        this%jr = J_read
-        this%pr = (-1)**(J_read+1)
-        read(strings(4)%val(3:),*) J_read
-        this%zr = J_read
-        read(strings(5)%val(2:),*) Q_read
+        tmp = strings(5)
+        call s%split(tmp, s%str("-"), strings)
+        read(strings(1)%val(2:),*) Q_read
         this%Q = Q_read
         this%reduced_matrix_element = .true.
         return
@@ -438,7 +418,7 @@ contains
       if( s%find(this%OpName,s%str('Tel5_'))) then
         ! format example:
         !   Tel5_1B_J1_Tz0_Q10
-        !   Tel5_2B_J1_Tz0_Q10
+        !   Tel5_2B_J1_Tz0_Q10-N2LO-NonLocal2-500
         OpName = this%OpName
         call s%split(OpName, s%str("_"), strings)
         read(strings(3)%val(2:),*) J_read
@@ -446,7 +426,9 @@ contains
         this%pr = (-1)**(J_read+1)
         read(strings(4)%val(3:),*) J_read
         this%zr = J_read
-        read(strings(5)%val(2:),*) Q_read
+        tmp = strings(5)
+        call s%split(tmp, s%str("-"), strings)
+        read(strings(1)%val(2:),*) Q_read
         this%Q = Q_read
         this%reduced_matrix_element = .true.
         return
@@ -455,7 +437,7 @@ contains
       if( s%find(this%OpName,s%str('Tmag5_'))) then
         ! format example:
         !   Tmag5_1B_J1_Tz0_Q10
-        !   Tmag5_2B_J1_Tz0_Q10
+        !   Tmag5_2B_J1_Tz0_Q10-N2LO-NonLocal2-500
         OpName = this%OpName
         call s%split(OpName, s%str("_"), strings)
         read(strings(3)%val(2:),*) J_read
@@ -463,7 +445,91 @@ contains
         this%pr = (-1)**(J_read)
         read(strings(4)%val(3:),*) J_read
         this%zr = J_read
-        read(strings(5)%val(2:),*) Q_read
+        tmp = strings(5)
+        call s%split(tmp, s%str("-"), strings)
+        read(strings(1)%val(2:),*) Q_read
+        this%Q = Q_read
+        this%reduced_matrix_element = .true.
+        this%skew = .true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str('M_'))) then
+        ! format example:
+        !   M_1B_J0_Tz0_Q10
+        !   M_2B_J0_Tz0_Q10-N3LO-NonLocal2-500
+
+        OpName = this%OpName
+        call s%split(OpName, s%str("_"), strings)
+        read(strings(3)%val(2:),*) J_read
+        this%jr = J_read
+        this%pr = (-1)**J_read
+        read(strings(4)%val(3:),*) J_read
+        this%zr = J_read
+        tmp = strings(5)
+        call s%split(tmp, s%str("-"), strings)
+        read(strings(1)%val(2:),*) Q_read
+        this%Q = Q_read
+        this%reduced_matrix_element = .true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str('L_'))) then
+        ! format example:
+        !   L_1B_J1_Tz0_Q10
+        !   L_2B_J0_Tz0_Q10-NLO-NonLocal2-500
+
+        OpName = this%OpName
+        call s%split(OpName, s%str("_"), strings)
+        read(strings(3)%val(2:),*) J_read
+        this%jr = J_read
+        this%pr = (-1)**J_read
+        read(strings(4)%val(3:),*) J_read
+        this%zr = J_read
+        tmp = strings(5)
+        call s%split(tmp, s%str("-"), strings)
+        read(strings(1)%val(2:),*) Q_read
+        this%Q = Q_read
+        this%reduced_matrix_element = .true.
+        this%skew = .true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str('Tel_'))) then
+        ! format example:
+        !   Tel_1B_J1_Tz0_Q10
+        !   Tel_2B_J1_Tz0_Q10-NLO-NonLocal2-500
+
+        OpName = this%OpName
+        call s%split(OpName, s%str("_"), strings)
+        read(strings(3)%val(2:),*) J_read
+        this%jr = J_read
+        this%pr = (-1)**J_read
+        read(strings(4)%val(3:),*) J_read
+        this%zr = J_read
+        tmp = strings(5)
+        call s%split(tmp, s%str("-"), strings)
+        read(strings(1)%val(2:),*) Q_read
+        this%Q = Q_read
+        this%reduced_matrix_element = .true.
+        this%skew = .true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str('Tmag_'))) then
+        ! format example:
+        !   Tmag_1B_J1_Tz0_Q10
+        !   Tmag_2B_J1_Tz0_Q10-NLO-NonLocal2-500
+        OpName = this%OpName
+        call s%split(OpName, s%str("_"), strings)
+        read(strings(3)%val(2:),*) J_read
+        this%jr = J_read
+        this%pr = (-1)**(J_read+1)
+        read(strings(4)%val(3:),*) J_read
+        this%zr = J_read
+        tmp = strings(5)
+        call s%split(tmp, s%str("-"), strings)
+        read(strings(1)%val(2:),*) Q_read
         this%Q = Q_read
         this%reduced_matrix_element = .true.
         return
@@ -544,6 +610,7 @@ contains
         this%zr = 0
         this%reduced_matrix_element = .true.
         this%channel_restriction=.true.
+        this%skew = .true.
         return
       end if
 
@@ -628,6 +695,7 @@ contains
     integer :: J_read
     real(8) :: Q_read
 
+    this%skew = .false.
     select case(this%opname%val)
 
     case('Hamil','hamil', "NNint", "NNNint", &
@@ -642,7 +710,7 @@ contains
       this%reduced_matrix_element = .false.
       this%channel_restriction = .true.
     case('kinetic','Kinetic','hopot','HOpot','R2','r2',&
-          &"HOHamil", "T_l0", "T_radial","T_Gj", "T_Gl")
+          &"HOHamil", "T_l0", "T_radial","T_Gj", "T_Gl", "PCM0", "HCM")
       this%jr = 0
       this%pr = 1
       this%tr = 0
@@ -663,11 +731,17 @@ contains
       this%pr = 1
       this%tr = 1
       this%channel_restriction = .false.
-    case('E1', "TDM_mag_st")
+    case('E1')
       this%jr = 1
       this%pr = -1
       this%tr = 1
       this%channel_restriction = .false.
+    case("TDM_mag_st")
+      this%jr = 1
+      this%pr = -1
+      this%tr = 1
+      this%channel_restriction = .false.
+      this%skew = .true.
     case('M1_2BC', 'M1_2BC_intr', 'M1_2BC_Sachs')
       this%jr = 1
       this%pr = 1
@@ -702,6 +776,7 @@ contains
       this%pr = -1
       this%tr = 0
       this%channel_restriction = .false.
+      this%skew = .true.
     case("Fermi")
       this%jr = 0
       this%pr = 1
@@ -745,6 +820,32 @@ contains
         return
       end if
 
+      if( s%find(this%OpName,s%str("Vector_T0"))) then
+        !
+        ! Format "Vector_T0_(intrinsic pararameter name1)_(intrinsic parameter value1)_(name2)_(value2)...-(order)-(regulator)(regulator_power)-(cutoff)"
+        ! Ex. "Vector_T0-NLO", "Vector_T0-NLO-NonLocal2-500"
+        !
+        this%jr = 1
+        this%pr =-1
+        this%tr = 0
+        this%reduced_matrix_element = .true.
+        this%channel_restriction=.true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str("Vector_T1"))) then
+        !
+        ! Format "Vector_T1_(intrinsic pararameter name1)_(intrinsic parameter value1)_(name2)_(value2)...-(order)-(regulator)(regulator_power)-(cutoff)"
+        ! Ex. "Vector_T1-NLO", "Vector_T1-NLO-NonLocal2-500"
+        !
+        this%jr = 1
+        this%pr =-1
+        this%tr = 1
+        this%reduced_matrix_element = .true.
+        this%channel_restriction=.true.
+        return
+      end if
+
       if( s%find(this%OpName,s%str("PVTCint"))) then
         this%jr = 0
         this%pr = -1
@@ -771,6 +872,7 @@ contains
         end if
         this%reduced_matrix_element = .true.
         this%channel_restriction = .true.
+        this%skew = .true.
         return
       end if
 
@@ -849,24 +951,7 @@ contains
         read(strings(5)%val(2:),*) Q_read
         this%Q = Q_read
         this%reduced_matrix_element = .true.
-        return
-      end if
-
-      if( s%find(this%OpName,s%str('M_'))) then
-        ! format example:
-        !   M_1B_J0_Tz0_Q10
-        !   M_2B_J0_Tz0_Q10
-
-        OpName = this%OpName
-        call s%split(OpName, s%str("_"), strings)
-        read(strings(3)%val(2:),*) J_read
-        this%jr = J_read
-        this%pr = (-1)**J_read
-        read(strings(4)%val(3:),*) J_read
-        this%tr = J_read
-        read(strings(5)%val(2:),*) Q_read
-        this%Q = Q_read
-        this%reduced_matrix_element = .true.
+        this%skew = .true.
         return
       end if
 
@@ -875,58 +960,6 @@ contains
         !   L5_1B_J1_Tz0_Q10
         !   L5_2B_J1_Tz0_Q10
 
-        OpName = this%OpName
-        call s%split(OpName, s%str("_"), strings)
-        read(strings(3)%val(2:),*) J_read
-        this%jr = J_read
-        this%pr = (-1)**(J_read+1)
-        read(strings(4)%val(3:),*) J_read
-        this%tr = J_read
-        read(strings(5)%val(2:),*) Q_read
-        this%Q = Q_read
-        this%reduced_matrix_element = .true.
-        return
-      end if
-
-      if( s%find(this%OpName,s%str('L_'))) then
-        ! format example:
-        !   L_1B_J1_Tz0_Q10
-        !   L_2B_J1_Tz0_Q10
-
-        OpName = this%OpName
-        call s%split(OpName, s%str("_"), strings)
-        read(strings(3)%val(2:),*) J_read
-        this%jr = J_read
-        this%pr = (-1)**J_read
-        read(strings(4)%val(3:),*) J_read
-        this%tr = J_read
-        read(strings(5)%val(2:),*) Q_read
-        this%Q = Q_read
-        this%reduced_matrix_element = .true.
-        return
-      end if
-
-      if( s%find(this%OpName,s%str('Tel_'))) then
-        ! format example:
-        !   Tel_1B_J1_Tz0_Q10
-        !   Tel_2B_J1_Tz0_Q10
-        OpName = this%OpName
-        call s%split(OpName, s%str("_"), strings)
-        read(strings(3)%val(2:),*) J_read
-        this%jr = J_read
-        this%pr = (-1)**J_read
-        read(strings(4)%val(3:),*) J_read
-        this%tr = J_read
-        read(strings(5)%val(2:),*) Q_read
-        this%Q = Q_read
-        this%reduced_matrix_element = .true.
-        return
-      end if
-
-      if( s%find(this%OpName,s%str('Tmag_'))) then
-        ! format example:
-        !   Tmag_1B_J1_Tz0_Q10
-        !   Tmag_2B_J1_Tz0_Q10
         OpName = this%OpName
         call s%split(OpName, s%str("_"), strings)
         read(strings(3)%val(2:),*) J_read
@@ -971,9 +1004,81 @@ contains
         read(strings(5)%val(2:),*) Q_read
         this%Q = Q_read
         this%reduced_matrix_element = .true.
+        this%skew = .true.
         return
       end if
 
+      if( s%find(this%OpName,s%str('M_'))) then
+        ! format example:
+        !   M_1B_J0_Tz0_Q10
+        !   M_2B_J0_Tz0_Q10
+
+        OpName = this%OpName
+        call s%split(OpName, s%str("_"), strings)
+        read(strings(3)%val(2:),*) J_read
+        this%jr = J_read
+        this%pr = (-1)**J_read
+        read(strings(4)%val(3:),*) J_read
+        this%tr = J_read
+        read(strings(5)%val(2:),*) Q_read
+        this%Q = Q_read
+        this%reduced_matrix_element = .true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str('L_'))) then
+        ! format example:
+        !   L_1B_J1_Tz0_Q10
+        !   L_2B_J1_Tz0_Q10
+
+        OpName = this%OpName
+        call s%split(OpName, s%str("_"), strings)
+        read(strings(3)%val(2:),*) J_read
+        this%jr = J_read
+        this%pr = (-1)**J_read
+        read(strings(4)%val(3:),*) J_read
+        this%tr = J_read
+        read(strings(5)%val(2:),*) Q_read
+        this%Q = Q_read
+        this%reduced_matrix_element = .true.
+        this%skew = .true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str('Tel_'))) then
+        ! format example:
+        !   Tel_1B_J1_Tz0_Q10
+        !   Tel_2B_J1_Tz0_Q10
+        OpName = this%OpName
+        call s%split(OpName, s%str("_"), strings)
+        read(strings(3)%val(2:),*) J_read
+        this%jr = J_read
+        this%pr = (-1)**J_read
+        read(strings(4)%val(3:),*) J_read
+        this%tr = J_read
+        read(strings(5)%val(2:),*) Q_read
+        this%Q = Q_read
+        this%reduced_matrix_element = .true.
+        this%skew = .true.
+        return
+      end if
+
+      if( s%find(this%OpName,s%str('Tmag_'))) then
+        ! format example:
+        !   Tmag_1B_J1_Tz0_Q10
+        !   Tmag_2B_J1_Tz0_Q10
+        OpName = this%OpName
+        call s%split(OpName, s%str("_"), strings)
+        read(strings(3)%val(2:),*) J_read
+        this%jr = J_read
+        this%pr = (-1)**(J_read+1)
+        read(strings(4)%val(3:),*) J_read
+        this%tr = J_read
+        read(strings(5)%val(2:),*) Q_read
+        this%Q = Q_read
+        this%reduced_matrix_element = .true.
+        return
+      end if
       write(*,'(2a)') 'In get_operator_rank_iso, selected operator has not been implemented: oprtr=', trim(this%opname%val)
       write(*,"(a)") "Assuming scalar J=0, P=1, T=0"
       this%jr = 0
@@ -985,12 +1090,11 @@ contains
     end select
   end subroutine get_operator_rank_iso
 
-  function CalcMEOneBody(this, bra, ket, isospin, e_charge) result(r)
+  function CalcMEOneBody(this, bra, ket, isospin) result(r)
     use MyLibrary
     type(OperatorDef), intent(in) :: this
     integer, intent(in) :: bra(4), ket(4)
     integer, intent(in), optional :: isospin
-    real(8), intent(in), optional :: e_charge
     integer :: nbra, lbra, jbra, zbra
     integer :: nket, lket, jket, zket
     real(8) :: r, b2, e
@@ -1010,11 +1114,10 @@ contains
     r = 0.d0
     b2 = hc**2/( (m_proton+m_neutron)*0.5*parameters%hw)
     e = 1.d0
-    if(present(e_charge)) e = e_charge
     if(present(isospin)) then
-      if(isospin==0) e = 0.5d0 * e
-      if(isospin==1 .and. zket == -1) e = 0.5d0 * e
-      if(isospin==1 .and. zket ==  1) e =-0.5d0 * e
+      if(isospin==0) e = 0.5d0 
+      if(isospin==1 .and. zket == -1) e = 0.5d0 
+      if(isospin==1 .and. zket ==  1) e =-0.5d0 
     end if
 
     select case(OpName%val)
@@ -1063,6 +1166,13 @@ contains
       r = j_to_ls_1( lbra, jbra, lket, jket, 0, 1, 1) * &
           & sqrt(dble(2*lket+1)) * sqrt(6.d0)
       return
+    case( "Orb_L" )
+      if(zbra /= zket) return
+      if(nbra /= nket) return
+      if(lbra /= lket) return
+      r = j_to_ls_1( lbra, jbra, lket, jket, 1, 0, 1) * &
+          & sqrt(dble(lket* (lket+1) * (2*lket+1))) * sqrt(2.d0)
+      return
     case( "Sigma_Tauz" )
       if(zbra /= zket) return
       if(nbra /= nket) return
@@ -1097,16 +1207,51 @@ contains
       if(nbra /= nket) return
       if( iabs(jbra-jket) > 2 ) return
       r = j_to_ls_1( lbra, jbra, lket, jket, 0, 1, 1 ) * &
-          & sqrt(dble(2*lket+1)) * sqrt(6.d0) * sqrt(2.d0) * dble(zket)
+          & sqrt(dble(2*lket+1)) * sqrt(6.d0)
     case('Fermi')
       if(zbra == zket) return
       if(lbra /= lket) return
       if(nbra /= nket) return
       if(jbra /= jket) return
       r = j_to_ls_1( lbra, jbra, lket, jket, 0, 0, 0 ) * &
-          & sqrt(dble(2*lket+1)) * sqrt(2.d0) * sqrt(2.d0) * dble(zket)
+          & sqrt(dble(2*lket+1)) * sqrt(2.d0)
     case('DFermi','DGamowTeller0','DGamowTeller2')
       return
+    case('Vector_Tz0')
+      if(triag(jbra, jket, 2*this%jr)) return
+      if(zbra /= zket) return
+      if(.not. present(isospin) .and. zket == 1) return
+      r = j_to_ls_1( lbra, jbra, lket, jket, 1, 0, 1) *  &
+        & sqrt(2.d0) * red_l_Y(lbra, 1, lket) * &
+        & radius_power(1, nbra, lbra, nket, lket) * &
+        & sqrt(4.d0 * pi / 3.d0) * b2**(-0.5d0) / (m_proton+m_neutron) * 2.d0 * e * hc
+    case( "Rp2")
+      if(zbra /= zket) return
+      if(jbra /= jket) return
+      if(lbra /= lket) return
+      r = radius_power(2, nbra, lbra, nket, lket) * b2 * e
+      return
+    case( "Rp4")
+      if(zbra /= zket) return
+      if(jbra /= jket) return
+      if(lbra /= lket) return
+      r = radius_power(4, nbra, lbra, nket, lket) * e * b2**2
+      return
+    case('Rp2so')
+      if(triag(jbra, jket, 2*this%jr)) return
+      if(nbra /= nket) return
+      if(lbra /= lket) return
+      if(jbra /= jket) return
+      if(zbra /= zket) return
+      e = 0.5d0 * (gs - dble(zket) * gv) - 0.25d0 * (1.d0 - dble(zket))
+      if(present(isospin)) then
+        if(isospin==0) e = (0.5d0 * gs - 0.25d0) 
+        if(isospin==1) e = (0.5d0 * gv - 0.25d0) * dble(-zket)
+      end if
+      r = e * hc**2 / (0.5d0*(m_proton+m_neutron))**2
+      if(jket == 2*lket+1) r = r * dble(lket)
+      if(jket == 2*lket-1) r = r * dble(-lket-1)
+
     case default
       if( s%find(this%OpName,s%str("Sp_E"))) then
         if(triag(jbra, jket, 2*this%jr)) return
@@ -1116,11 +1261,27 @@ contains
         return
       end if
 
+      if( s%find(this%OpName,s%str("Sp_L_M"))) then
+        if(triag(jbra, jket, 2*this%jr)) return
+        if(zbra /= zket) return
+        r = single_particle_magnetic_multipole(nbra, lbra, jbra, nket, lket, jket, zket, this%jr, sqrt(b2), &
+          & isospin, .true., .false.)
+        return
+      end if
+
+      if( s%find(this%OpName,s%str("Sp_S_M"))) then
+        if(triag(jbra, jket, 2*this%jr)) return
+        if(zbra /= zket) return
+        r = single_particle_magnetic_multipole(nbra, lbra, jbra, nket, lket, jket, zket, this%jr, sqrt(b2), &
+          & isospin, .false., .true.)
+        return
+      end if
+
       if( s%find(this%OpName,s%str("Sp_M"))) then
         if(triag(jbra, jket, 2*this%jr)) return
         if(zbra /= zket) return
         r = single_particle_magnetic_multipole(nbra, lbra, jbra, nket, lket, jket, zket, this%jr, sqrt(b2), &
-          & isospin, e_charge)
+          & isospin, .true., .true.)
         return
       end if
 
@@ -1200,6 +1361,14 @@ contains
     OpName = this%GetOpName()
 
     select case(OpName%val)
+    case( "PCM0", "Unit" )
+      if(n1 /= n2) return
+      if(l1 /= l2) return
+      if(s1 /= s2) return
+      if(j1 /= j2) return
+      if(tz1 /= tz2) return
+      r = 1.d0
+      return
     case('kinetic', 'Kinetic')
       ! kinetic energy term
       if(tz1 /= tz2) return
@@ -1261,7 +1430,7 @@ contains
       r = two_body_r2(n1,l1,n2,l2,parameters%hw)
       return
 
-    case('Sigma', 'Spin')
+    case('Sigma','Spin')
       ! (sigma_{1,z} + sigma_{2,z})
       if(n1 /= n2) return
       if(l1 /= l2) return
@@ -1312,6 +1481,7 @@ contains
       if(iabs(j1 - j2) > 1) return
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 1, 0, 1) * &
           & sqrt(dble(2*s1+1)) * sqrt( dble( l1 * (l1+1) * (2*l1+1) )) * sqrt(3.d0 / (4.d0 * pi))
+      return
     case('M1_L_IV')
       ! < n'l'S'J'Tz || (tau1,z + tau2,z) L || nlSJTz >
       if(n1 /= n2) return
@@ -1323,6 +1493,18 @@ contains
           & sqrt(dble(2*s1+1)) * sqrt( dble( l1 * (l1+1) * (2*l1+1) )) * &
           & asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_plus_tau2,1,0) * &
           & sqrt(3.d0 / (4.d0*pi))
+      return
+    case('Orb_L')
+      ! < n'l'S'J'Tz || L || nlSJTz >
+      if(n1 /= n2) return
+      if(l1 /= l2) return
+      if(s1 /= s2) return
+      if(tz1 /= tz2) return
+      if(iabs(j1 - j2) > 1) return
+      r = j_to_ls( l1, s1, j1, l2, s2, j2, 1, 0, 1) * &
+          & sqrt(dble(2*s1+1)) * sqrt( dble( l1 * (l1+1) * (2*l1+1) ))
+      return
+
     case('M1_S_IS')
       ! < n'l'S'J'Tz || s1 + s2 || nlSJTz > x 0.880
       if(n1 /= n2) return
@@ -1367,7 +1549,6 @@ contains
           & radius_power(2, n1, l1, n2, l2) * b2 * &
           & asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_plus_tau2,1,0)
       return
-
     case('GamowTeller')
       ! sigma tau_{+/-}
       if(l1 /= l2) return
@@ -1377,8 +1558,7 @@ contains
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 0, 1, 1 ) * &
           & sqrt(dble(2*l1+1)) * &
           & (tau1_iso(s1,s2) * asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_m,1,tz1-tz2) + &
-          &  tau2_iso(s1,s2) * asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau2_m,1,tz1-tz2)) / sqrt(2.d0)
-      if(tz1 - tz2 > 0) r = r * (-1.d0)
+          &  tau2_iso(s1,s2) * asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau2_m,1,tz1-tz2)) 
       return
 
     case('Fermi')
@@ -1390,10 +1570,8 @@ contains
       if(tz2 == tz1) return
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 0, 0, 0 ) * &
           & sqrt(dble(2*l1+1)) * sqrt(dble(2*s1+1)) * &
-          & asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_plus_tau2,1,tz1-tz2) / sqrt(2.d0)
-      if(tz1 - tz2 > 0) r = r * (-1.d0)
+          & asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau1_plus_tau2,1,tz1-tz2) 
       return
-
     case('DFermi')
       if(l1 /= l2) return
       if(n1 /= n2) return
@@ -1427,15 +1605,15 @@ contains
       return
 
     case("TDM_mag")
-      ! NOTE: derived from -(1/4) int dx x^2 j(x)
-      ! [ g1 r x (s1-s2) - g2 r x (s1t1 - s2t2) ]/8m
+      ! NOTE: derived from - pi int dx x^2 j(x)
+      ! pi [ g1 r x (s1-s2) - g2 r x (s1t1 - s2t2) ]/2m
       ! -sqrt(2.0) comes from r x s = -i sqrt(2.0) [r s]^1
       ! i is not taken into account here
       if( l1==l2 ) return
       if(iabs(l1-l2) > 1) return
       if(iabs(n1-n2) > 1) return
       if(tz1 /= tz2) return
-      r = - sqrt(2.d0) * hc / (4.d0 * (m_proton+m_neutron)) * &
+      r = - pi * sqrt(2.d0) * hc / (m_proton+m_neutron) * &
           & j_to_ls( l1, s1, j1, l2, s2, j2, 1, 1, 1) * &
           & red_r_l(n1,l1,n2,l2) * &
           & sqrt(b2) * &
@@ -1444,13 +1622,13 @@ contains
           &  tau2_iso(s1,s2) * asym_isospin_func_pn(l1,s1,tz1,l2,s2,tz2,tau2_m,1,0)) * gv)
 
     case("TDM_conv")
-      ! - e[ r + r2 nabla ]/8m (tau1z - tau2z)
+      ! - pi e[ r + r2 nabla ]/2m (tau1z - tau2z)
       if( l1==l2 ) return
       if( s1/=s2 ) return
       if(iabs(l1-l2) > 1) return
       if(iabs(n1-n2) > 2) return
       if(tz1 /= tz2) return
-      r = - 1.d0 * hc / (4.d0 * (m_proton+m_neutron)) * sqrt(dble(2*s1+1)) * &
+      r = - pi * hc / (m_proton+m_neutron) * sqrt(dble(2*s1+1)) * &
           & j_to_ls( l1, s1, j1, l2, s2, j2, 1, 0, 1 ) * &
           & ( red_r_l(n1,l1,n2,l2) + red_r2_nab_l(n1,l1,n2,l2) ) * &
           & sqrt(b2) * &
@@ -1525,6 +1703,7 @@ contains
     j1   = bra(7); j2   = ket(7)
     z1   = bra(8); z2   = ket(8)
     OpName = this%GetOpName()
+    r = 0.d0
     select case(OpName%val)
     case("M1_2BC")
       if(z1 /= z2) return
@@ -1535,6 +1714,30 @@ contains
       if(z1 /= z2) return
       if(iabs(j1 - j2) > 1) return
       r = me_M1_2b_current_sachs(n1, l1, s1, jr1, ncm1, lcm1, j1, z1, n2, l2, s2, jr2, ncm2, lcm2, j2, z2, this%pn())
+      return
+    case("Orb_L")
+      if(z1 /= z2) return
+      if(iabs(j1 - j2) > 1) return
+      if(iabs(jr1 - jr2) > 1) return
+      if(n1 /= n2) return
+      if(l1 /= l2) return
+      if(s1 /= s2) return
+      if(Ncm1 /= Ncm2) return
+      if(Lcm1 /= Lcm2) return
+      r = j_to_ls(lcm1, jr1, j1, lcm2, jr2, j2, 1, 0, 1) * sqrt(dble(2*jr1+1)) * sqrt(dble(lcm1*(lcm1+1)*(2*lcm1+1))) + &
+          & j_to_ls(lcm1, jr1, j1, lcm2, jr2, j2, 0, 1, 1) * sqrt(dble(2*lcm1+1)) * &
+          & j_to_ls(l1, s1, jr1, l2, s2, jr2, 1, 0, 1) * sqrt(dble(2*s1+1)) * sqrt(dble(l1*(l1+1)*(2*l1+1)))
+      return
+    case("HCM")
+      if(Ncm1 /= Ncm2) return
+      if(Lcm1 /= Lcm2) return
+      if(n1 /= n2) return
+      if(l1 /= l2) return
+      if(s1 /= s2) return
+      if(jr1 /= jr2) return
+      if(j1 /= j2) return
+      if(z1 /= z2) return
+      r = (dble(2*Ncm1 + Lcm1) + 1.5d0) * parameters%hw * sqrt(dble(2*jr1+1))
       return
     end select
   end function get_two_body_me_pn_cm
@@ -1575,6 +1778,14 @@ contains
     OpName = this%GetOpName()
     select case(OpName%val)
 
+    case( "PCM0", "Unit" )
+      if(n1 /= n2) return
+      if(l1 /= l2) return
+      if(s1 /= s2) return
+      if(j1 /= j2) return
+      if(t1 /= t2) return
+      r = 1.d0
+      return
     case('kinetic', 'Kinetic')
       ! kinetic energy term
       if(t1 /= t2) return
@@ -1759,7 +1970,7 @@ contains
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 0, 1, 1 ) * &
           & sqrt(dble(2*l1+1)) * &
           & (tau1_iso(s1,s2) * tau1_iso(t1,t2) + &
-          &  tau2_iso(s1,s2) * tau2_iso(t1,t2)) / sqrt(2.d0)
+          &  tau2_iso(s1,s2) * tau2_iso(t1,t2)) / sqrt(2.d0) ! sqrt(2) is from t and tau definition
       return
     case("Fermi")
       if(l1 /= l2) return
@@ -1769,8 +1980,8 @@ contains
       if(j1 /= j2) return
       r = j_to_ls( l1, s1, j1, l2, s2, j2, 0, 0, 0 ) * &
           & sqrt(dble(2*l1+1)) * sqrt(dble(2*s1+1)) * &
-          & tau1_plus_tau2_iso(t1,t2) / sqrt(2.d0)
-
+          & tau1_plus_tau2_iso(t1,t2) / sqrt(2.d0) ! sqrt(2) is from t and tau definition
+      return
     case('DFermi')
       if(l1 /= l2) return
       if(n1 /= n2) return
@@ -1803,20 +2014,20 @@ contains
       return
 
     case("TDM_mag_s")
-      ! gs r x (sigma_1 - sigma_2) / 8m / i
+      ! pi gs r x (sigma_1 - sigma_2) / 2m / i
       ! tauz = -1 (proton), tauz= 1 (neutron)
       if(l1==l2) return
       if(iabs(l1-l2) > 1) return
       if(iabs(n1-n2) > 1) return
       if(t1 /= t2) return
-      r = red_r_l(n1,l1,n2,l2) * sqrt(b2) * &
+      r =-red_r_l(n1,l1,n2,l2) * sqrt(b2) * &
           & 6.d0 * sqrt( dble( (2*j1+1) * (2*j2+1) * (2*s1+1) * (2*s2+1) * (2*t1+1) ) ) * &
           & snj(2*l1, 2*s1, 2*j1, 2*l2, 2*s2, 2*j2, 2, 2, 2) * &
           & ( (-1.d0)**s2 - (-1.d0)**s1 ) * &
-          & sjs(1, 1, 2, 2*s2, 2*s1, 1) * hc / (4.d0 * (m_proton+m_neutron)) * gs
+          & sjs(1, 1, 2, 2*s2, 2*s1, 1) * hc * pi / (m_proton+m_neutron) * gs
 
     case("TDM_mag_st")
-      ! gv r x (sigma_1 tauz_1 - sigma_2 tauz_2) / 8m / i
+      ! pi gv r x (sigma_1 tauz_1 - sigma_2 tauz_2) / 2m / i
       ! tauz = -1 (proton), tauz= 1 (neutron)
       if(l1==l2) return
       if(iabs(l1-l2) > 1) return
@@ -1826,7 +2037,7 @@ contains
           & (2*t1+1) * (2*t2+1) ) ) * &
           & snj(2*l1, 2*s1, 2*j1, 2*l2, 2*s2, 2*j2, 2, 2, 2) * &
           & sjs(1, 1, 2, 2*s2, 2*s1, 1) * sjs(1, 1, 2, 2*t2, 2*t1, 1) * &
-          & ( (-1.d0)**(s2+t2) - (-1.d0)**(s1+t1) ) * hc / (4.d0 * (m_proton+m_neutron) ) * gv
+          & ( (-1.d0)**(s2+t2) - (-1.d0)**(s1+t1) ) * pi * hc / (m_proton+m_neutron) * gv
 
     case default
       if( csys%find(OpName, csys%str("HOHamil") )) then
@@ -1863,6 +2074,7 @@ contains
     integer :: n1, l1, s1, jr1, Ncm1, Lcm1, j1, t1
     integer :: n2, l2, s2, jr2, Ncm2, Lcm2, j2, t2
     type(str) :: OpName
+    r = 0.d0
     n1   = bra(1); n2   = ket(1)
     l1   = bra(2); l2   = ket(2)
     s1   = bra(3); s2   = ket(3)
@@ -1882,6 +2094,17 @@ contains
       if(iabs(t1 - t2) > 1) return
       if(iabs(j1 - j2) > 1) return
       r = me_M1_2b_current_sachs(n1, l1, s1, jr1, ncm1, lcm1, j1, t1, n2, l2, s2, jr2, ncm2, lcm2, j2, t2, this%pn())
+      return
+    case("HCM")
+      if(Ncm1 /= Ncm2) return
+      if(Lcm1 /= Lcm2) return
+      if(n1 /= n2) return
+      if(l1 /= l2) return
+      if(s1 /= s2) return
+      if(jr1 /= jr2) return
+      if(j1 /= j2) return
+      if(t1 /= t2) return
+      r = (dble(2*Ncm1 + Lcm1) + 1.5d0) * parameters%hw * sqrt(dble(2*jr1+1))
       return
     end select
   end function get_two_body_me_iso_cm
@@ -1928,258 +2151,6 @@ contains
     r = r * (2.d0 * b2)
   end function two_body_r2
 
-  !
-  ! isospin functions pn
-  !
-  !function tau_dot_tau_pn(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! < lbra, sbra| tau_{1} dot tau_{2} | lket, sket >
-  !  integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(zbra /= zket) return
-  !  r = 1.d0
-  !  if(abs(zket) == 1) return
-  !  r = (-1.d0)**(lbra+sbra) + (-1.d0)**(lket+sket) - 0.5d0 * (1.d0 + (-1.d0)**(lbra+lket+sbra+sket))
-  !end function tau_dot_tau_pn
-
-  !function tau1_tau2_tensor_0_pn(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! 3 tau_{1,z}tau_{2,z} - tau_{1} dot tau_{2}
-  !  integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
-  !  real(8) :: r
-  !  r = 3.d0 * tau1z_tau2z_pn(lbra,sbra,zbra,lket,sket,zket) - &
-  !      & tau_dot_tau_pn(lbra,sbra,zbra,lket,sket,zket)
-  !end function tau1_tau2_tensor_0_pn
-
-  !function tau1_tau2_vector_0_pn(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! tau_{1,x}tau_{2,y} - tau_{1,y}tau_{2,x}
-  !  ! i is not taken into account here
-  !  integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(zbra /= zket) return
-  !  if(abs(zket) == 1) return
-  !  r = (-1.d0)**(lbra+sbra) - (-1.d0)**(lket+sket)
-  !end function tau1_tau2_vector_0_pn
-
-  !function tau1z(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! < lbra, sbra| tau_{1,z} | lket, sket >
-  !  integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if( zbra /= zket ) return
-  !  if( abs(zket) == 1 ) r = dble(zket)
-  !  if( zket == 0 ) r = -0.5d0 + 0.5d0 * (-1.d0)**(lbra+sbra+lket+sket)
-  !end function tau1z
-
-  !function tau2z(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! < lbra, sbra| tau_{2,z} | lket, sket >
-  !  integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if( zbra /= zket ) return
-  !  if( abs(zket) == 1 ) r = dble(zket)
-  !  if( zket == 0 ) r = 0.5d0 - 0.5d0 * (-1.d0)**(lbra+sbra+lket+sket)
-  !end function tau2z
-
-  !function tau1z_tau2z_pn(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! < lbra, sbra| tau_{1,z} tau_{2,z} | lket, sket >
-  !  integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(zbra /= zket) return
-  !  r = 1.d0
-  !  if(abs(zket) == 1) return
-  !  r = - 0.5d0 * (1.d0 + (1.d0)**(lbra+lket+sbra+sket))
-  !end function tau1z_tau2z_pn
-
-  !function tau1z_minus_tau2z_pn(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! < lbra, sbra| tau_{1}_z - tau_{2}_z | lket, sket >
-  !  integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
-  !  real(8) :: r
-  !  r = tau1z(lbra,sbra,zbra,lket,sket,zket) - &
-  !      & tau2z(lbra,sbra,zbra,lket,sket,zket)
-  !end function tau1z_minus_tau2z_pn
-
-  !function tau1z_plus_tau2z_pn(zbra,zket) result(r)
-  !  ! < lbra, sbra| tau_{1}_z + tau_{2}_z | lket, sket >
-  !  integer, intent(in) :: zbra, zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(zbra /= zket) return
-  !  if(zket == 0) return
-  !  r = dble(2*zket)
-  !end function tau1z_plus_tau2z_pn
-
-  !function tau1_plus_minus(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! < lbra, sbra| tau_{1}_+ | lket, sket >
-  !  ! < lbra, sbra| tau_{1}_- | lket, sket >
-  !  ! here, < n | tau_{+} | p > = 1 and < p | tau_{-} | n > = 1 are used.
-  !  integer, intent(in) :: lbra,sbra,zbra,lket,sket,zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(zbra == zket) return
-  !  if(zbra == 0 .and. zket ==-1) r = (-1.d0)**(lbra+sbra) / sqrt(2.d0)
-  !  if(zbra == 1 .and. zket == 0) r = 1.d0 / sqrt(2.d0)
-  !  if(zbra == 0 .and. zket == 1) r = 1.d0 / sqrt(2.d0)
-  !  if(zbra ==-1 .and. zket == 0) r = (-1.d0)**(lket+sket) / sqrt(2.d0)
-  !end function tau1_plus_minus
-
-  !function tau2_plus_minus(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  ! < lbra, sbra| tau_{2}_+ | lket, sket >
-  !  ! < lbra, sbra| tau_{2}_- | lket, sket >
-  !  ! here, < n | tau_{+} | p > = 1 and < p | tau_{-} | n > = 1 are used.
-  !  integer, intent(in) :: lbra,sbra,zbra,lket,sket,zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(zbra == zket) return
-  !  if(zbra == 0 .and. zket ==-1) r = 1.d0 / sqrt(2.d0)
-  !  if(zbra == 1 .and. zket == 0) r = (-1.d0)**(lket+sket) / sqrt(2.d0)
-  !  if(zbra == 0 .and. zket == 1) r = (-1.d0)**(lbra+sbra) / sqrt(2.d0)
-  !  if(zbra ==-1 .and. zket == 0) r = 1.d0 / sqrt(2.d0)
-  !end function tau2_plus_minus
-
-  !!
-  !! isospin functions iso
-  !!
-  !function tau_dot_tau_iso(tbra, tket, reduced) result(r)
-  !  ! < lbra, sbra| tau_{1} dot tau_{2} | lket, sket >
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: tbra, tket
-  !  logical, intent(in) :: reduced
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(tbra /= tket) return
-  !  r = 6.d0 * sqrt(dble(2*tket+1)) * (-1.d0)**(1+tket) * sjs(1, 1, 2*tket, 1, 1, 2)
-  !  if(reduced) return
-  !  if(tket == 0) r = -3.d0
-  !  if(tket == 1) r =  1.d0
-  !end function tau_dot_tau_iso
-
-  !function tau1_tau2_tensor_iso(tbra, tket, Trank) result(r)
-  !  !  < Tbra || [tau1 x tau2]^{Trank} || Tket >
-  !  use MyLibrary, only: snj
-  !  integer, intent(in) :: tbra, tket, Trank
-  !  real(8) :: r
-  !  r = 6.d0 * sqrt(dble( (2*Tbra+1) * (2*Tket+1) * (2*Trank+1) ) ) * &
-  !      & snj(1, 1, 2*Tbra, 1, 1, 2*Tket, 2, 2, 2*Trank)
-  !end function tau1_tau2_tensor_iso
-
-  !function tau1z_minus_tau2z_iso(Tbra,Tket) result(r)
-  !  ! < Tbra || tau_{1}_z - tau_{2}_z || Tket >
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: Tbra, Tket
-  !  real(8) :: r
-  !  r = sigma1(Tbra,Tket) - sigma2(Tbra,Tket)
-  !end function tau1z_minus_tau2z_iso
-
-  !function tau1z_plus_tau2z_iso(tbra,tket) result(r)
-  !  ! < Tbra || tau_{1}_z + tau_{2}_z || Tket >
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: Tbra, Tket
-  !  real(8) :: r
-  !  r = sigma1(Tbra,Tket) + sigma2(Tbra,Tket)
-  !end function tau1z_plus_tau2z_iso
-
-  !!
-  !! spin functions
-  !!
-  !function sigma_dot_sigma(sbra, sket, reduced) result(r)
-  !  integer, intent(in) :: sbra, sket
-  !  logical, intent(in) :: reduced
-  !  real(8) :: r
-  !  r = tau_dot_tau_iso(sbra, sket, reduced)
-  !end function sigma_dot_sigma
-
-  !function sigma1_sigma2_tensor(sbra, sket, Srank) result(r)
-  !  integer, intent(in) :: sbra, sket, Srank
-  !  real(8) :: r
-  !  r = tau1_tau2_tensor_iso(sbra,sket,Srank)
-  !end function sigma1_sigma2_tensor
-
-  !function sigma1(Sbra,Sket) result(r)
-  !  ! < Sbra || sigma_{1} || Sket >
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: Sbra, Sket
-  !  real(8) :: r
-  !  r = sqrt(6.d0) * (-1.d0)**Sket * &
-  !      & sqrt(dble( (2*Sbra+1) * (2*Sket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*Sket, 2*Sbra, 1)
-  !end function sigma1
-
-  !function sigma2(Sbra,Sket) result(r)
-  !  ! < Sbra || sigma_{2} || Sket >
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: Sbra, Sket
-  !  real(8) :: r
-  !  r = sqrt(6.d0) * (-1.d0)**Sbra * &
-  !      & sqrt(dble( (2*Sbra+1) * (2*Sket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*Sket, 2*Sbra, 1)
-  !end function sigma2
-
-
-  !function sigma1z_minus_sigma2z(Sbra,Sket) result(r)
-  !  integer, intent(in) :: Sbra, Sket
-  !  real(8) :: r
-  !  r = Sigma1( Sbra, Sket ) - Sigma2( Sbra, Sket )
-  !end function sigma1z_minus_sigma2z
-
-  !function sigma1z_plus_sigma2z(Sbra,Sket) result(r)
-  !  integer, intent(in) :: Sbra, Sket
-  !  real(8) :: r
-  !  r = Sigma1( Sbra, Sket ) + Sigma2( Sbra, Sket )
-  !end function sigma1z_plus_sigma2z
-
-  !function sigtau1z_plus_sigtau2z_pn(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: lbra,sbra,zbra,lket,sket,zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(zbra/=zket) return
-  !  r =   Sigma1( Sbra, Sket ) * Tau1z( lbra, sbra, zbra, lket, sket, zket ) + &
-  !      & Sigma2( Sbra, Sket ) * Tau2z( lbra, sbra, zbra, lket, sket, zket )
-  !end function sigtau1z_plus_sigtau2z_pn
-
-  !function sigtau1z_minus_sigtau2z_pn(lbra,sbra,zbra,lket,sket,zket) result(r)
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: lbra,sbra,zbra,lket,sket,zket
-  !  real(8) :: r
-  !  r = 0.d0
-  !  if(zbra/=zket) return
-  !  r =   Sigma1( Sbra, Sket ) * Tau1z( lbra, sbra, zbra, lket, sket, zket ) - &
-  !      & Sigma2( Sbra, Sket ) * Tau2z( lbra, sbra, zbra, lket, sket, zket )
-  !end function sigtau1z_minus_sigtau2z_pn
-
-  !function sigtau1z_plus_sigtau2z_iso(sbra,tbra,sket,tket) result(r)
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: sbra,tbra,sket,tket
-  !  real(8) :: r
-  !  r = (-1.d0)**sket * sqrt( dble( 6*(2*sbra+1)*(2*sket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*sket, 2*sbra, 1) * &
-  !      & (-1.d0)**tket * sqrt( dble( 6*(2*tbra+1)*(2*tket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*tket, 2*tbra, 1) + &
-  !      & (-1.d0)**sbra * sqrt( dble( 6*(2*sbra+1)*(2*sket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*sket, 2*sbra, 1) * &
-  !      & (-1.d0)**tbra * sqrt( dble( 6*(2*tbra+1)*(2*tket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*tket, 2*tbra, 1)
-  !end function sigtau1z_plus_sigtau2z_iso
-
-  !function sigtau1z_minus_sigtau2z_iso(sbra,tbra,sket,tket) result(r)
-  !  use MyLibrary, only: sjs
-  !  integer, intent(in) :: sbra,tbra,sket,tket
-  !  real(8) :: r
-  !  r = (-1.d0)**sket * sqrt( dble( 6*(2*sbra+1)*(2*sket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*sket, 2*sbra, 1) * &
-  !      & (-1.d0)**tket * sqrt( dble( 6*(2*tbra+1)*(2*tket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*tket, 2*tbra, 1) - &
-  !      & (-1.d0)**sbra * sqrt( dble( 6*(2*sbra+1)*(2*sket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*sket, 2*sbra, 1) * &
-  !      & (-1.d0)**tbra * sqrt( dble( 6*(2*tbra+1)*(2*tket+1) ) ) * &
-  !      & sjs(1, 1, 2, 2*tket, 2*tbra, 1)
-  !end function sigtau1z_minus_sigtau2z_iso
-
-  !
-  !
-  !
   function j_to_ls( lbra, sbra, jbra, lket, sket, jket, lrank, srank, jrank) result(r)
     use MyLibrary, only: snj
     integer, intent(in) :: lbra, sbra, jbra, lket, sket, jket, lrank, srank, jrank
@@ -2251,42 +2222,42 @@ contains
   end function single_particle_electric_multipole
 
   function single_particle_magnetic_multipole(nbra, lbra, jbra, nket, lket, jket, z, lam, b, &
-      & isospin, e_charge) result(r)
-    use MyLibrary, only: pi, tjs, triag
+      & isospin, is_orb, is_spin) result(r)
+    use MyLibrary, only: pi, tjs, triag, gs, gv
     integer, intent(in) :: nbra, lbra, jbra, nket, lket, jket, z, lam
     real(8), intent(in) :: b
     integer, intent(in), optional :: isospin
-    real(8), intent(in), optional :: e_charge
-    real(8) :: r, e
+    logical, intent(in) :: is_orb, is_spin
+    real(8) :: r
     real(8) :: kappa, g_spin, g_orb
     r = 0.d0
     if((-1)**(lbra + lket + lam + 1) == -1) return
-    e = 1.d0
-    if(present(e_charge)) e = e_charge
     if(present(isospin)) then
       if(isospin==0) then
-        g_spin = 0.880d0
-        g_orb = 0.5d0 * e
+        g_spin = gs
+        g_orb = 0.5d0
       else if(isospin==1) then
-        g_spin = 4.706d0 * dble(-z)
-        g_orb = 0.5d0 * e * dble(-z)
+        g_spin = gv * dble(-z)
+        g_orb = 0.5d0 * dble(-z)
       else
         write(*,*) "Error", __LINE__, __FILE__
         stop
       end if
     else
       if(z == -1) then
-        g_spin = 5.586d0
-        g_orb = e
+        g_spin = gs + gv
+        g_orb = 1.d0
 
       else if(z== 1) then
-        g_spin =-3.826d0
+        g_spin = gs - gv
         g_orb = 0.d0
       else
         write(*,*) "Error", __LINE__, __FILE__
         stop
       end if
     end if
+    if(.not. is_orb) g_orb = 0.d0
+    if(.not. is_spin) g_spin = 0.d0
     kappa = ((-1.d0)**(lbra + (jbra+1)/2) * dble(jbra+1) + (-1.d0)**(lket + (jket+1)/2) * dble(jket+1)) * 0.5d0
     r = 1/sqrt(4.d0 * pi) * (-1.d0)**((jket-1)/2 + lam) * &
         & sqrt( dble( (jbra+1)*(2*lam+1)*(jket+1) )) * tjs(jbra,jket,2*lam,1,-1,0) * &
@@ -2505,6 +2476,7 @@ contains
         ! "best value" set is from Ann. Phys. (N. Y). 124, 449 (1980).
         pv_couplings(1:7) = [12.d0, -30.d0, -0.5d0, 0.d0, -25.d0, -5.d0, -3.d0]
         pv_couplings(:) = pv_couplings(:) * 3.8d0 * 1.d-8
+        pv_couplings(1) = 2.6d-7 ! Phys. Rev. Lett. 121, 242002
       end if
       return
     end if

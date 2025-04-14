@@ -34,11 +34,14 @@ module OneBodyLabOps
   real(8), allocatable :: rnl_bra(:,:,:), rnl_ket(:,:,:,:), pbra(:), pket(:,:), wbra(:), wket(:,:)
   integer :: NMesh = 120
   real(8), parameter :: kmin = 0.d0, kmax = 10.d0
-  logical, parameter :: use_parametric_form_factor = .true.
+  !logical, parameter :: use_parametric_form_factor = .true.
   real(8), parameter :: Lambda_A = 1040.d0 ! Phys. Rev. D 86, 103511 (2012)
   real(8), parameter :: d18 = g_A * (1.d0 - g_pi * f_pi / (m_nucleon * g_A)) / m_pi**2 ! This should be small, because of Goldberger-Treimann relation
   real(8), parameter :: d22 = 2.d0 * g_A / Lambda_A**2
-  !logical, parameter :: use_parametric_form_factor = .false.
+  !real(8), parameter :: d18 = 0.d0
+  !real(8), parameter :: d22 = 0.d0
+  logical, parameter :: use_parametric_form_factor = .false.
+  complex(8), parameter :: i_unit = (0.d0, 1.d0)
 contains
   subroutine FinOneBodyLabOp(this)
     class(OneBodyLabOp), intent(inout) :: this
@@ -342,7 +345,6 @@ contains
     call this%SetReduced(.true.)
   end subroutine NormalToReduced
 
-
   subroutine set_multipole(op, isospin)
     use MyLibrary, only: triag, hc, m_nucleon, gauss_legendre, ho_radial_wf_norm
     abstract interface
@@ -363,8 +365,8 @@ contains
     type(str) :: opname
     real(8), allocatable :: p_tmp(:), w_tmp(:), mom_mat(:,:)
     procedure(func), pointer :: f_ptr
-    integer :: lbra, jbra, zbra, lket, jket, zket, kappa
-    complex(8), parameter :: i_unit = (0.d0, 1.d0)
+    integer :: lbra, jbra, zbra, lket, jket, zket
+    integer :: lambda_phase
     integer :: a, b
     type(SingleParticleOrbit), pointer :: oa, ob
 
@@ -393,117 +395,39 @@ contains
     end do
 
     opname = op%GetOpName()
+    lambda_phase = op%GetOpJ()
     f_ptr => null()
-    if(s%find(op%GetOpName(), s%str('UTM5_1B'))) then
-      f_ptr => M5_UT_momentum_mat
-      kappa = op%GetOpJ()
-    end if
+    if(s%find(op%GetOpName(), s%str('UTM5_1B')    )) f_ptr => M5_UT_momentum_mat
+    if(s%find(op%GetOpName(), s%str('M-1M5_1B')   )) f_ptr => M5_m1_momentum_mat
+    if(s%find(op%GetOpName(), s%str('L5_1B')      )) f_ptr => L5_momentum_mat
+    if(s%find(op%GetOpName(), s%str('Tel5_1B')    )) f_ptr => Tel5_momentum_mat
+    if(s%find(op%GetOpName(), s%str('Tmag5_1B')   )) f_ptr => Tmag5_momentum_mat
+    if(s%find(op%GetOpName(), s%str('ISL5_1B')    )) f_ptr => L5_is_momentum_mat
+    if(s%find(op%GetOpName(), s%str('ISTel5_1B')  )) f_ptr => Tel5_is_momentum_mat
+    if(s%find(op%GetOpName(), s%str('ISTmag5_1B') )) f_ptr => Tmag5_is_momentum_mat
+    if(s%find(op%GetOpName(), s%str('M_1B')       )) f_ptr => M_momentum_mat
+    if(s%find(op%GetOpName(), s%str('StaticM_1B') )) f_ptr => M_static_momentum_mat
+    if(s%find(op%GetOpName(), s%str('M-1M_1B')    )) f_ptr => M_m1_momentum_mat
+    if(s%find(op%GetOpName(), s%str('M-2M_1B')    )) f_ptr => M_m2_momentum_mat
+    if(s%find(op%GetOpName(), s%str('SOM_1B')     )) f_ptr => M_so_momentum_mat
+    if(s%find(op%GetOpName(), s%str('DFM_1B')     )) f_ptr => M_df_momentum_mat
+    if(s%find(op%GetOpName(), s%str('L_1B')       )) f_ptr => L_momentum_mat
+    if(s%find(op%GetOpName(), s%str('Tel_1B')     )) f_ptr => Tel_momentum_mat
+    if(s%find(op%GetOpName(), s%str('Tmag_1B')    )) f_ptr => Tmag_momentum_mat
+    if(s%find(op%GetOpName(), s%str('ConvL_1B')   )) f_ptr => ConvL_momentum_mat
+    if(s%find(op%GetOpName(), s%str('ConvTmag_1B'))) f_ptr => ConvTmag_momentum_mat
+    if(s%find(op%GetOpName(), s%str('SpinTmag_1B'))) f_ptr => SpinTmag_momentum_mat
+    if(s%find(op%GetOpName(), s%str('ConvTel_1B') )) f_ptr => ConvTel_momentum_mat
+    if(s%find(op%GetOpName(), s%str('SpinTel_1B') )) f_ptr => SpinTel_momentum_mat
 
-    if(s%find(op%GetOpName(), s%str('M-1M5_1B'))) then
-      f_ptr => M5_m1_momentum_mat
-      kappa = op%GetOpJ()
-    end if
-    
-    if(s%find(op%GetOpName(), s%str('L5_1B'))) then
-      f_ptr => L5_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('Tel5_1B'))) then
-      f_ptr => Tel5_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('Tmag5_1B'))) then
-      f_ptr => Tmag5_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('ISL5_1B'))) then
-      f_ptr => L5_is_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('ISTel5_1B'))) then
-      f_ptr => Tel5_is_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('ISTmag5_1B'))) then
-      f_ptr => Tmag5_is_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-
-    if(s%find(op%GetOpName(), s%str('M_1B'))) then
-      f_ptr => M_momentum_mat
-      kappa = op%GetOpJ()
-    end if
-
-    if(s%find(op%GetOpName(), s%str('StaticM_1B'))) then
-      f_ptr => M_static_momentum_mat
-      kappa = op%GetOpJ()
-    end if
-
-    if(s%find(op%GetOpName(), s%str('M-1M_1B'))) then
-      f_ptr => M_m1_momentum_mat
-      kappa = op%GetOpJ()
-    end if
-
-    if(s%find(op%GetOpName(), s%str('M-2M_1B'))) then
-      f_ptr => M_m2_momentum_mat
-      kappa = op%GetOpJ()
-    end if
-
-    if(s%find(op%GetOpName(), s%str('SOM_1B'))) then
-      f_ptr => M_so_momentum_mat
-      kappa = op%GetOpJ()
-    end if
-
-    if(s%find(op%GetOpName(), s%str('DFM_1B'))) then
-      f_ptr => M_df_momentum_mat
-      kappa = op%GetOpJ()
-    end if
-
-    if(s%find(op%GetOpName(), s%str('L_1B'))) then
-      f_ptr => L_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('Tel_1B'))) then
-      f_ptr => Tel_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('Tmag_1B'))) then
-      f_ptr => Tmag_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('ConvL_1B'))) then
-      f_ptr => ConvL_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('ConvTmag_1B'))) then
-      f_ptr => ConvTmag_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('SpinTmag_1B'))) then
-      f_ptr => SpinTmag_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('ConvTel_1B'))) then
-      f_ptr => ConvTel_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
-
-    if(s%find(op%GetOpName(), s%str('SpinTel_1B'))) then
-      f_ptr => SpinTel_momentum_mat
-      kappa = op%GetOpJ() + 1
-    end if
+    if(s%find(op%GetOpName(), s%str('M_1B')    )) lambda_phase = op%GetOpJ()
+    if(s%find(op%GetOpName(), s%str('Tel_1B')  )) lambda_phase = op%GetOpJ()+1
+    if(s%find(op%GetOpName(), s%str('Tmag_1B') )) lambda_phase = op%GetOpJ()+1
+    if(s%find(op%GetOpName(), s%str('L_1B')    )) lambda_phase = op%GetOpJ()+1
+    if(s%find(op%GetOpName(), s%str('M5_1B')   )) lambda_phase = op%GetOpJ()
+    if(s%find(op%GetOpName(), s%str('Tel5_1B') )) lambda_phase = op%GetOpJ()+1
+    if(s%find(op%GetOpName(), s%str('Tmag5_1B'))) lambda_phase = op%GetOpJ()+1
+    if(s%find(op%GetOpName(), s%str('L5_1B')   )) lambda_phase = op%GetOpJ()+1
 
     if(.not. associated(f_ptr)) then
       write(*,*) "Unknown operator name"
@@ -521,11 +445,8 @@ contains
                 if(abs(zbra-zket)/2 /= op%GetOpZ()) cycle
 
                 call f_ptr(mom_mat, op%GetQ(), op%GetOpJ(), lbra, jbra, zbra, lket, jket, zket, isospin)
-                if(mod(abs(lbra-lket+kappa),2)==0) then
-                  phase = dble(i_unit ** (lbra - lket + kappa))
-                else
-                  phase = dble(i_unit ** (lbra - lket + kappa-1)) ! in the unit of i
-                end if
+                if(mod(abs(lbra-lket-lambda_phase),2)==0) phase = dble(i_unit ** (lbra - lket - lambda_phase))
+                if(mod(abs(lbra-lket-lambda_phase),2)==1) phase = dble(i_unit ** (lbra - lket - lambda_phase - 1)) 
                 mom_mat(:,:) = mom_mat(:,:) * phase
                 call transform_to_ho(op, mom_mat, lbra, jbra, zbra, lket, jket, zket)
 
@@ -628,7 +549,7 @@ contains
   end subroutine Tmag_momentum_mat
 
   subroutine M5_UT_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m
+    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
@@ -639,11 +560,12 @@ contains
       if(isospin==0) return
     end if
     fact = g_A / (8.d0 * pi) / (Q**2 + m_pi**2) * tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+    fact = make_beta_hermitian(fact, 1, tz_phase*(zbra-zket)/2) 
     mat = func_axial_charge_ut(lbra, jbra, lket, jket, rankJ, Q) * fact
   end subroutine M5_UT_momentum_mat
 
   subroutine M5_m1_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m
+    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
@@ -654,10 +576,14 @@ contains
       if(isospin==0) return
     end if
     fact = (-1.d0) * g_A / (8.d0 * pi) * tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+    fact = make_beta_hermitian(fact, 1, tz_phase*(zbra-zket)/2) 
     mat = func_axial_charge_m1(lbra, jbra, lket, jket, rankJ, Q) * fact
   end subroutine M5_m1_momentum_mat
 
   subroutine L5_is_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
+    !
+    ! J = sigma/2
+    !
     use MyLibrary, only: hc, m_pi, g_A, pi, tau_1
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
@@ -668,13 +594,17 @@ contains
     if(present(isospin)) then
       if(isospin==1) return
     end if
-    fact = -1.d0 / (8.d0 * pi) * tau_1(zbra,zket)
+    fact = 1.d0 / (8.d0 * pi) * tau_1(zbra,zket)
+    if(abs(fact) < 1.d-8) return
     mat = func_axial_vector(lbra, jbra, lket, jket, rankJ+1, rankJ, Q) * (-1.d0) * sqrt(dble(rankJ+1)/dble(2*rankJ+1))
     if(rankJ>0) mat = mat + func_axial_vector(lbra, jbra, lket, jket, rankJ-1, rankJ, Q) * sqrt(dble(rankJ)/dble(2*rankJ+1))
     mat = mat * fact
   end subroutine L5_is_momentum_mat
 
   subroutine Tel5_is_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
+    !
+    ! J = sigma/2
+    !
     use MyLibrary, only: hc, m_pi, g_A, pi, tau_1
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
@@ -685,13 +615,17 @@ contains
     if(present(isospin)) then
       if(isospin==1) return
     end if
-    fact = -1.d0 / (8.d0 * pi) * tau_1(zbra,zket)
+    fact = 1.d0 / (8.d0 * pi) * tau_1(zbra,zket)
+    if(abs(fact) < 1.d-8) return
     mat = func_axial_vector(lbra, jbra, lket, jket, rankJ+1, rankJ, Q) * sqrt(dble(rankJ)/dble(2*rankJ+1))
     if(rankJ>0) mat = mat + func_axial_vector(lbra, jbra, lket, jket, rankJ-1, rankJ, Q) * sqrt(dble(rankJ+1)/dble(2*rankJ+1))
     mat = mat * fact
   end subroutine Tel5_is_momentum_mat
 
   subroutine Tmag5_is_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
+    !
+    ! J = sigma/2
+    !
     use MyLibrary, only: hc, m_pi, g_A, pi, tau_1
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
@@ -702,12 +636,17 @@ contains
     if(present(isospin)) then
       if(isospin==1) return
     end if
-    fact = -1.d0 / (8.d0 * pi) * tau_1(zbra,zket)
-    mat = func_axial_vector(lbra, jbra, lket, jket, rankJ, rankJ, Q) * fact
+    fact = 1.d0 / (8.d0 * pi) * tau_1(zbra,zket)
+    if(abs(fact) < 1.d-8) return
+    mat = func_axial_vector(lbra, jbra, lket, jket, rankJ, rankJ, Q) * fact * (-1.d0)
   end subroutine Tmag5_is_momentum_mat
 
   subroutine L5_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m
+    !
+    ! LO: J = (-gA/2) sigma tau
+    ! For DM, you have to multiply (-1/gA)
+    !
+    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
@@ -717,15 +656,20 @@ contains
     if(present(isospin)) then
       if(isospin==0) return
     end if
-    fact = 1.d0 / (8.d0 * pi) * tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
-    fact = fact * (-g_A + g_A * Q**2 / (Q**2 + m_pi**2)  - d18 * m_pi**2 * Q**2 / (Q**2 + m_pi**2))
+    fact = 1.d0 / (4.d0 * pi) * tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+    fact = fact * ( -g_A + g_A * Q**2 / (Q**2 + m_pi**2) - 2.d0 * d18 * m_pi**2 * Q**2 / (Q**2 + m_pi**2)) * 0.5d0
+    fact = make_beta_hermitian(fact, 1, tz_phase*(zbra-zket)/2) 
     mat = func_axial_vector(lbra, jbra, lket, jket, rankJ+1, rankJ, Q) * (-1.d0) * sqrt(dble(rankJ+1)/dble(2*rankJ+1))
     if(rankJ>0) mat = mat + func_axial_vector(lbra, jbra, lket, jket, rankJ-1, rankJ, Q) * sqrt(dble(rankJ)/dble(2*rankJ+1))
     mat = mat * fact
   end subroutine L5_momentum_mat
 
   subroutine Tel5_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m
+    !
+    ! LO: J = (-gA/2) sigma tau
+    ! For DM, you have to multiply (-1/gA)
+    !
+    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
@@ -735,14 +679,20 @@ contains
     if(present(isospin)) then
       if(isospin==0) return
     end if
-    fact = (-g_A+d22) / (8.d0 * pi) * tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+    fact = 1.d0 / (4.d0 * pi) * tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+    fact = fact * (-g_A+d22*Q**2) * 0.5d0
+    fact = make_beta_hermitian(fact, 1, tz_phase*(zbra-zket)/2) 
     mat = func_axial_vector(lbra, jbra, lket, jket, rankJ+1, rankJ, Q) * sqrt(dble(rankJ)/dble(2*rankJ+1))
     if(rankJ>0) mat = mat + func_axial_vector(lbra, jbra, lket, jket, rankJ-1, rankJ, Q) * sqrt(dble(rankJ+1)/dble(2*rankJ+1))
     mat = mat * fact
   end subroutine Tel5_momentum_mat
 
   subroutine Tmag5_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m
+    !
+    ! LO: J = (-gA/2) sigma tau
+    ! For DM, you have to multiply (-1/gA)
+    !
+    use MyLibrary, only: hc, m_pi, g_A, pi, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
@@ -752,30 +702,35 @@ contains
     if(present(isospin)) then
       if(isospin==0) return
     end if
-    fact = (-g_A+d22) / (8.d0 * pi) * tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
-    mat = func_axial_vector(lbra, jbra, lket, jket, rankJ, rankJ, Q) * fact
+    fact = 1.d0 / (4.d0 * pi) * tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+    fact = fact * (-g_A+d22*Q**2) * 0.5d0
+    fact = make_beta_hermitian(fact, 1, tz_phase*(zbra-zket)/2) 
+    mat = func_axial_vector(lbra, jbra, lket, jket, rankJ, rankJ, Q) * fact * (-1.d0)
   end subroutine Tmag5_momentum_mat
 
   subroutine M_static_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GE, fact
+    real(8) :: GE, fact, tmp
     integer :: ibra, iket
     mat(:,:) = 0.d0
+    GE = 0.d0
     if(.not. present(isospin)) then
       GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)*0.5d0
-      GE = GE + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GE_form_factor_iso(Q,1)*0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GE = GE + tmp * GE_form_factor_iso(Q,1)*0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
         GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GE = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GE_form_factor_iso(Q,1) * 0.5d0
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GE = tmp * GE_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
@@ -789,25 +744,28 @@ contains
     !
     ! spin-orbit contribution
     !
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, m_nucleon, tau_1, tau_m
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, m_nucleon, tau_1, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GM, fact, ang_fact
+    real(8) :: GM, fact, ang_fact, tmp
     integer :: ibra, iket, K
     mat(:,:) = 0.d0
+    GM = 0.d0
     if(.not. present(isospin)) then
       GM = tau_1(zbra,zket) * GM_form_factor_iso(Q,0)*0.5d0
-      GM = GM + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GM_form_factor_iso(Q,1)*0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GM = GM + tmp * GM_form_factor_iso(Q,1)*0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
         GM = tau_1(zbra,zket) * GM_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GM = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GM_form_factor_iso(Q,1) * 0.5d0
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GM = tmp * GM_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
@@ -818,25 +776,28 @@ contains
   end subroutine M_m1_momentum_mat
 
   subroutine M_m2_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, m_nucleon, tau_1, tau_m
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, m_nucleon, tau_1, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GE
+    real(8) :: GE, tmp
     real(8) :: fact1, fact2
     mat(:,:) = 0.d0
+    GE = 0.d0
     if(.not. present(isospin)) then
       GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)*0.5d0
-      GE = GE + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GE_form_factor_iso(Q,1)*0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GE = GE + tmp * GE_form_factor_iso(Q,1)*0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
         GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GE = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GE_form_factor_iso(Q,1) * 0.5d0
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GE = tmp * GE_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
@@ -853,25 +814,29 @@ contains
     !
     ! spin-orbit contribution
     !
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, m_nucleon, tau_1, tau_m
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, m_nucleon, tau_1, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GM, GE, fact1, fact2, ang_fact
+    real(8) :: GM, GE, fact, ang_fact, tmp
     integer :: ibra, iket, K
     mat(:,:) = 0.d0
+    GE = 0.d0
+    GM = 0.d0
     if(.not. present(isospin)) then
       GM = tau_1(zbra,zket) * GM_form_factor_iso(Q,0)*0.5d0
-      GM = GM + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GM_form_factor_iso(Q,1)*0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GM = GM + tmp * GM_form_factor_iso(Q,1)*0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
         GM = tau_1(zbra,zket) * GM_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GM = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GM_form_factor_iso(Q,1) * 0.5d0
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GM = tmp * GM_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
@@ -879,45 +844,49 @@ contains
 
     if(.not. present(isospin)) then
       GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)*0.5d0
-      GE = GE + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GE_form_factor_iso(Q,1)*0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GE = GE + tmp * GE_form_factor_iso(Q,1)*0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
         GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GE = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GE_form_factor_iso(Q,1) * 0.5d0
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GE = tmp * GE_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
     end if
 
-    fact1 = GM / (8.d0 * pi * m_nucleon**2)
-    fact2 = (-1.d0) * GE / (16.d0 * pi * m_nucleon**2)
-    mat = func_charge_m1(lbra, jbra, lket, jket, rankJ, Q) * (fact1+fact2)
+    fact = (GM-0.5d0*GE) / (8.d0 * pi * m_nucleon**2)
+    mat = func_charge_m1(lbra, jbra, lket, jket, rankJ, Q) * fact
   end subroutine M_so_momentum_mat
 
   subroutine M_df_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, m_nucleon, tau_1, tau_m
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, m_nucleon, tau_1, tau_m, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
     real(8) :: GE
-    real(8) :: fact
+    real(8) :: fact, tmp
     mat(:,:) = 0.d0
+    GE = 0.d0
     if(.not. present(isospin)) then
       GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)*0.5d0
-      GE = GE + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GE_form_factor_iso(Q,1)*0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GE = GE + tmp * GE_form_factor_iso(Q,1)*0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
         GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GE = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GE_form_factor_iso(Q,1) * 0.5d0
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GE = tmp * GE_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
@@ -929,24 +898,27 @@ contains
 
 
   subroutine ConvL_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GE, fact
+    real(8) :: GE, fact, tmp
     mat(:,:) = 0.d0
+    GE = 0.d0
     if(.not. present(isospin)) then
-      GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)
-      GE = GE + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GE_form_factor_iso(Q,1)
+      GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GE = GE + tmp * GE_form_factor_iso(Q,1) * 0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
-        GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)
+        GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GE = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GE_form_factor_iso(Q,1)
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GE = tmp * GE_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
@@ -958,24 +930,27 @@ contains
   end subroutine ConvL_momentum_mat
 
   subroutine ConvTel_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GE, fact
+    real(8) :: GE, fact, tmp
     mat(:,:) = 0.d0
+    GE = 0.d0
     if(.not. present(isospin)) then
-      GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)
-      GE = GE + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GE_form_factor_iso(Q,1)
+      GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GE = GE + tmp * GE_form_factor_iso(Q,1) * 0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
-        GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)
+        GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GE = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GE_form_factor_iso(Q,1)
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GE = tmp * GE_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
@@ -987,54 +962,60 @@ contains
   end subroutine ConvTel_momentum_mat
 
   subroutine ConvTmag_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GE, fact
+    real(8) :: GE, fact, tmp
     mat(:,:) = 0.d0
+    GE = 0.d0
     if(.not. present(isospin)) then
-      GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)
-      GE = GE + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GE_form_factor_iso(Q,1)
+      GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GE = GE + tmp * GE_form_factor_iso(Q,1) * 0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
-        GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0)
+        GE = tau_1(zbra,zket) * GE_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GE = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GE_form_factor_iso(Q,1)
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GE = tmp * GE_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
     end if
     if(abs(GE) < 1.d-8) return
     mat = func_vector_conv(lbra, jbra, lket, jket, rankJ, rankJ, Q)
-    mat(:,:) = mat(:,:) * GE / (4.d0 * pi * (m_proton+m_neutron))
+    mat(:,:) = mat(:,:) * GE / (4.d0 * pi * (m_proton+m_neutron)) * (-1.d0)
   end subroutine ConvTmag_momentum_mat
 
   subroutine SpinTel_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GM, fact
+    real(8) :: GM, fact, tmp
     integer :: k, ibra, iket
 
     mat(:,:) = 0.d0
+    GM = 0.d0
     if(.not. present(isospin)) then
       GM = tau_1(zbra,zket) * GM_form_factor_iso(Q,0)*0.5d0
-      GM = GM + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GM_form_factor_iso(Q,1)*0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GM = GM + tmp * GM_form_factor_iso(Q,1)*0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
         GM = tau_1(zbra,zket) * GM_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GM = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GM_form_factor_iso(Q,1) * 0.5d0
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GM = tmp * GM_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
@@ -1042,37 +1023,40 @@ contains
     if(abs(GM) < 1.d-8) return
     mat = func_vector_spin(lbra, jbra, lket, jket, rankJ+1, rankJ, Q) * sqrt(dble(rankJ) / dble(2*rankJ+1))
     if(rankJ > 0) mat = mat + func_vector_spin(lbra, jbra, lket, jket, rankJ-1, rankJ, Q) * sqrt(dble(rankJ+1) / dble(2*rankJ+1))
-    mat(:,:) = mat(:,:) * GM / (4.d0 * pi * (m_proton+m_neutron))
+    mat(:,:) = mat(:,:) * GM / (4.d0 * pi * (m_proton+m_neutron)) 
   end subroutine SpinTel_momentum_mat
 
   subroutine SpinTmag_momentum_mat(mat, Q, rankJ, lbra, jbra, zbra, lket, jket, zket, isospin)
-    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv
+    use MyLibrary, only: hc, triag, dcg, sjs, snj, pi, tau_1, tau_m, m_proton, m_neutron, gs, gv, make_beta_hermitian
     real(8), intent(inout) :: mat(:,:)
     real(8), intent(in) :: Q
     integer, intent(in) :: rankJ, lbra, jbra, zbra, lket, jket, zket
     integer, optional :: isospin
-    real(8) :: GM, fact
+    real(8) :: GM, fact, tmp
     integer :: k, ibra, iket
 
     mat(:,:) = 0.d0
+    GM = 0.d0
     if(.not. present(isospin)) then
       GM = tau_1(zbra,zket) * GM_form_factor_iso(Q,0)*0.5d0
-      GM = GM + tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-          & GM_form_factor_iso(Q,1)*0.5d0
+      tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+      tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+      GM = GM + tmp * GM_form_factor_iso(Q,1)*0.5d0
     end if
     if(present(isospin)) then
       if(isospin==0) then
         GM = tau_1(zbra,zket) * GM_form_factor_iso(Q,0) * 0.5d0
       else if(isospin==1) then
-        GM = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase) * &
-            & GM_form_factor_iso(Q,1) * 0.5d0
+        tmp = tau_m(zbra,zket,tz_phase*(zbra-zket)/2,phase=tz_phase)
+        tmp = make_beta_hermitian(tmp, 1, tz_phase*(zbra-zket)/2) 
+        GM = tmp * GM_form_factor_iso(Q,1) * 0.5d0
       else
         write(*,*) "Error:", __FILE__, __LINE__
       end if
     end if
     if(abs(GM) < 1.d-8) return
     mat = func_vector_spin(lbra, jbra, lket, jket, rankJ, rankJ, Q)
-    mat(:,:) = mat(:,:) * GM / (4.d0 * pi * (m_proton+m_neutron))
+    mat(:,:) = mat(:,:) * GM / (4.d0 * pi * (m_proton+m_neutron)) * (-1.d0)
   end subroutine SpinTmag_momentum_mat
 
   function func_charge_static(lbra, jbra, lket, jket, lambda, Q) result(res)
@@ -1089,11 +1073,11 @@ contains
         res(ibra,iket) = angular_part(pbra(ibra)*hc, pket(ibra,iket)*hc, Q, lbra, lket, lambda)
       end do
     end do
-    res(:,:) = res(:,:) * (-1.d0)**(lbra+lambda+(1+jket)/2) * sqrt(dble(jbra+1)*dble(jket+1)) * &
-        & sjs(jbra, 2*lbra, 1, 2*lket, jket, 2*lambda)
+    res(:,:) = res(:,:) * (-1.d0)**(lbra+lambda+(1+jket)/2) * &
+        & sqrt(dble(jbra+1)*dble(jket+1)) * sjs(jbra, 2*lbra, 1, 2*lket, jket, 2*lambda)
   end function func_charge_static
 
-  function func_charge_m1(lbra, jbra, lket, jket, lambda, Q) result(res)
+  function func_charge_m1_(lbra, jbra, lket, jket, lambda, Q) result(res)
     use MyLibrary, only: hc, dcg, sjs, snj, pi, gamma_function
     real(8), intent(in) :: Q
     integer, intent(in) :: lbra, jbra, lket, jket, lambda
@@ -1120,7 +1104,7 @@ contains
             do ibra = 1, NMesh
               do iket = 1, NMesh
                 res(ibra,iket) = res(ibra,iket) + (fk * flam * fks) * &
-                    & general_integral(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, k1, k2, K, Q) * &
+                    & general_integral_(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, k1, k2, K, Q) * &
                     & (pbra(ibra)*hc)**(lam1+1) * (pket(ibra,iket)*hc)**(lam2+1) / Q**lambda
               end do
             end do
@@ -1129,6 +1113,31 @@ contains
       end do
     end do
     res(:,:) = res(:,:) * 6.d0 * sqrt(dble(jbra+1)*dble(jket+1)*dble(2*lambda+1))
+  end function func_charge_m1_
+
+  function func_charge_m1(lbra, jbra, lket, jket, lambda, Q) result(res)
+    use MyLibrary, only: hc, dcg, sjs, snj, pi, gamma_function
+    real(8), intent(in) :: Q
+    integer, intent(in) :: lbra, jbra, lket, jket, lambda
+    real(8), allocatable :: res(:,:)
+    real(8) :: fk, fks, flam, pb, pk
+    integer :: K, ibra, iket, lam1, lam2, k1, k2
+
+    allocate(res(NMesh,NMesh))
+    res(:,:) = 0.d0
+    do K = abs(lbra-lket), lbra+lket
+      fk = sqrt(dble(2*K+1)) * snj(2*lbra, 1, jbra, 2*lket, 1, jket, 2*K, 2, 2*lambda)
+      if(abs(fk) < 1.d-8) cycle
+      do ibra = 1, NMesh
+        pb = pbra(ibra)*hc
+        do iket = 1, NMesh
+          pk = pket(ibra,iket)*hc
+          res(ibra,iket) = res(ibra,iket) + &
+            & pb * pk * general_integral(pb, lbra, pk, lket, 1, 1, 1, lambda, K, Q) * fk
+        end do
+      end do
+    end do
+    res(:,:) = res(:,:) * (2.d0/sqrt(3.d0)) * sqrt(dble(jbra+1)*dble(jket+1)) * (4.d0 * pi)
   end function func_charge_m1
 
   function func_vector_spin(lbra, jbra, lket, jket, kappa, lambda, Q) result(res)
@@ -1146,15 +1155,16 @@ contains
       if(abs(fk) < 1.d-8) cycle
       do ibra = 1, NMesh
         do iket = 1, NMesh
-          res(ibra,iket) = res(ibra,iket) + fk * angular_part(pbra(ibra)*hc, pket(ibra,iket)*hc, Q, lbra, lket, k)
+          res(ibra,iket) = res(ibra,iket) + fk * angular_part(pbra(ibra)*hc, pket(ibra,iket)*hc, Q, lbra, lket, K) 
         end do
       end do
     end do
-    res(:,:) = res(:,:) * (-1.d0)**(kappa+lambda+1) * 6.d0 * sqrt(dble(jbra+1)*dble(jket+1)*dble(2*lambda+1)*dble(2*kappa+1)) * Q
+    res(:,:) = res(:,:) * 6.d0 * sqrt(dble(jbra+1)*dble(jket+1)*dble(2*lambda+1)*dble(2*kappa+1)) * Q
+    res(:,:) = res(:,:) * (-1.d0)**(1+lambda+kappa)
   end function func_vector_spin
 
   ! it seems this one is not numerically stable for high lambda
-  function func_vector_conv(lbra, jbra, lket, jket, kappa, lambda, Q) result(res)
+  function func_vector_conv_(lbra, jbra, lket, jket, kappa, lambda, Q) result(res)
     use MyLibrary, only: hc, dcg, sjs, snj, pi, m_proton, m_neutron, gamma_function
     real(8), intent(in) :: Q
     integer, intent(in) :: lbra, jbra, lket, jket, kappa, lambda
@@ -1169,38 +1179,62 @@ contains
     do k1 = 0, kappa
       k2 = kappa - k1
       do K = max(abs(1-k1), abs(k2-lambda)), min(1+k1, k2+lambda)
-        fk = sqrt(dble(2*k1+1)) * &
+        fk = (-1.d0)**k2 * sqrt(dble(2*k1+1)) * &
             & sqrt(4.d0*pi*gamma_function(dble(2*kappa+2)) / (gamma_function(dble(2*k1+2)) * gamma_function(dble(2*k2+2)))) * &
-            & (-1.d0)**k2 * sjs(2, 2*k1, 2*K, 2*k2, 2*lambda, 2*kappa) * dcg(2, 0, 2*k1, 0, 2*K, 0)
+            & sjs(2, 2*k1, 2*K, 2*k2, 2*lambda, 2*kappa) * dcg(2, 0, 2*k1, 0, 2*K, 0)
         if(abs(fk) < 1.d-8) cycle
         do ibra = 1, NMesh
           do iket = 1, NMesh
             res(ibra,iket) = res(ibra,iket) + fk * fact * &
-                & general_integral(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, K, k2, lambda, Q) * &
-                & (pbra(ibra)*hc)**(k1+1) * (pket(ibra,iket)*hc)**k2 / Q**kappa
+                & general_integral_(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, K, k2, lambda, Q) * &
+                & (pbra(ibra)*hc)**(k1+1) * (pket(ibra,iket)*hc)**k2 / Q**kappa 
           end do
         end do
       end do
     end do
 
-    fact = (-1.d0)**(lbra+(3+jket)/2+kappa) * sqrt(dble(jbra+1)*dble(jket+1)*dble(2*kappa+1)) * &
+    fact = (-1.d0)**(lbra+(3+jket)/2) * sqrt(dble(jbra+1)*dble(jket+1)*dble(2*kappa+1)) * &
         & sjs(jbra, 2*lbra, 1, 2*lket, jket, 2*lambda)
     do k1 = 0, kappa
       k2 = kappa - k1
       do K = max(abs(1-k2), abs(k1-lambda)), min(1+k2, k1+lambda)
-        fk = sqrt(dble(2*k2+1)) * &
+        fk = (-1.d0)**k1 * sqrt(dble(2*k2+1)) * &
             & sqrt(4.d0*pi*gamma_function(dble(2*kappa+2)) / (gamma_function(dble(2*k1+2)) * gamma_function(dble(2*k2+2)))) * &
-            & (-1.d0)**k2 * sjs(2, 2*k2, 2*K, 2*k1, 2*lambda, 2*kappa) * dcg(2, 0, 2*k2, 0, 2*K, 0)
+            & sjs(2, 2*k2, 2*K, 2*k1, 2*lambda, 2*kappa) * dcg(2, 0, 2*k2, 0, 2*K, 0)
         if(abs(fk) < 1.d-8) cycle
         do ibra = 1, NMesh
           do iket = 1, NMesh
             res(ibra,iket) = res(ibra,iket) + fk * fact * &
-                & general_integral(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, k1, K, lambda, Q) * &
+                & general_integral_(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, k1, K, lambda, Q) * &
                 & (pbra(ibra)*hc)**k1 * (pket(ibra,iket)*hc)**(k2+1) / Q**kappa
           end do
         end do
       end do
     end do
+  end function func_vector_conv_
+
+  function func_vector_conv(lbra, jbra, lket, jket, kappa, lambda, Q) result(res)
+    use MyLibrary, only: hc, dcg, sjs, snj, pi, m_proton, m_neutron, gamma_function
+    real(8), intent(in) :: Q
+    integer, intent(in) :: lbra, jbra, lket, jket, kappa, lambda
+    real(8), allocatable :: res(:,:)
+    real(8) :: fk, fact, pb, pk
+    integer :: k1, k2, K, ibra, iket
+
+    allocate(res(NMesh,NMesh))
+    fact = (-1.d0)**(lbra+(1+jket)/2+lambda) * sqrt(dble(jbra+1)*dble(jket+1)) * &
+        & sjs(jbra, 2*lbra, 1, 2*lket, jket, 2*lambda) 
+    fact = fact * 4.d0 * pi / sqrt(3.d0) * (-1.d0)**(1+kappa+lambda)
+    res(:,:) = 0.d0
+    do ibra = 1, NMesh
+      pb = pbra(ibra)*hc
+      do iket = 1, NMesh
+        pk = pket(ibra,iket)*hc
+        res(ibra,iket) = pb * general_integral(pb, lbra, pk, lket, 1, 0, 1, kappa, lambda, Q) + &
+          & pk * general_integral(pb, lbra, pk, lket, 0, 1, 1, kappa, lambda, Q)
+      end do
+    end do
+    res(:,:) = res(:,:) * fact
   end function func_vector_conv
 
   function func_axial_charge_ut(lbra, jbra, lket, jket, lambda, Q) result(res)
@@ -1252,7 +1286,7 @@ contains
           do ibra = 1, NMesh
             do iket = 1, NMesh
               res(ibra,iket) = res(ibra,iket) + (fk * flam * fx) * &
-                  & general_integral(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, X, lam2, K, Q) * &
+                  & general_integral_(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, X, lam2, K, Q) * &
                   & (pbra(ibra)*hc)**(lam1+1) * (pket(ibra,iket)*hc)**lam2 / Q**lambda
             end do
           end do
@@ -1277,7 +1311,7 @@ contains
           do ibra = 1, NMesh
             do iket = 1, NMesh
               res(ibra,iket) = res(ibra,iket) + (fk * flam * fx) * &
-                  & general_integral(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, lam1, X, K, Q) * &
+                  & general_integral_(pbra(ibra)*hc, lbra, pket(ibra,iket)*hc, lket, lam1, X, K, Q) * &
                   & (pbra(ibra)*hc)**(lam1+1) * (pket(ibra,iket)*hc)**lam2 / Q**lambda
             end do
           end do
@@ -1321,12 +1355,11 @@ contains
     integer, intent(in) :: lbra, lket, L
     real(8) :: res
     res = 0.d0
-    if(triag(lbra,lket,L)) return
-    res = sqrt(4.d0 * pi) * (2.d0*pi) * (-1.d0)**(lbra+L) * Yfunc(pbra, lbra, pket, lket, Q, L) / &
-        & (pbra * pket * Q)
+    if(triag(lbra, lket, L)) return
+    res = sqrt(4.d0 * pi) * (2.d0*pi) * (-1.d0)**(lbra+L) * Yfunc(pbra, lbra, pket, lket, Q, L) / (pbra * pket * Q) 
   end function angular_part
 
-  function general_integral(pbra, lbra, pket, lket, k1, k2, k, Q) result(res)
+  function general_integral_(pbra, lbra, pket, lket, k1, k2, k, Q) result(res)
     use MyLibrary, only: pi, triag, dcg, sjs
     real(8), intent(in) :: pbra, pket, Q
     integer, intent(in) :: lbra, lket, k1, k2, k
@@ -1342,6 +1375,25 @@ contains
     res = res * (-1.d0)**(lket+k) * &
         & sqrt(dble(2*lbra+1)*dble(2*lket+1)*dble(2*k1+1)*dble(2*k2+1)*dble(2*k+1)) * &
         & 2.d0 * pi / (pbra * pket * Q)
+  end function general_integral_
+
+  function general_integral(pbra, lbra, pket, lket, k1, k2, k, lambda, kappa, Q) result(res)
+    use MyLibrary, only: pi, triag, dcg, snj
+    real(8), intent(in) :: pbra, pket, Q
+    integer, intent(in) :: lbra, lket, k1, k2, k, lambda, kappa
+    real(8) :: res, fact
+    integer :: alpha1, alpha2
+    res = 0.d0
+    do alpha1 = abs(lbra-k1), lbra+k1
+      do alpha2 = abs(lket-k2), lket+k2
+        fact = snj(2*k1, 2*alpha1, 2*lbra, 2*k2, 2*alpha2, 2*lket, 2*K, 2*lambda, 2*kappa) * &
+          & dcg(2*lbra, 0, 2*k1, 0, 2*alpha1, 0) * dcg(2*lket, 0, 2*k2, 0, 2*alpha2, 0) 
+        if(abs(fact) < 1.d-16) cycle
+        !res = res + fact * angular_part(pbra, pket, Q, alpha1, alpha2, lambda) * (-1.d0)**(lket+alpha1+kappa) 
+        res = res + fact * angular_part(pbra, pket, Q, alpha1, alpha2, lambda) * (-1.d0)**(lbra+alpha1)
+      end do
+    end do
+    res = res * sqrt(dble(2*lbra+1) * dble(2*lket+1) * dble(2*k1+1) * dble(2*k2+1) * dble(2*k+1) * dble(2*kappa+1)) / (4.d0 * pi)
   end function general_integral
 
   function Yfunc(p1, l1, p2, l2, q, L) result(res)
@@ -1359,8 +1411,7 @@ contains
     cost2 = (p1**2 - p2**2 - q**2) / (2.d0*p2*q)
 
     do m = -min(l1, l2), min(l1, l2)
-      res = res + dcg(2*l1, -2*m, 2*l2, 2*m, 2*L, 0) * &
-          & spherical_harmonics0(l1,-m,cost1) * spherical_harmonics0(l2,m,cost2)
+      res = res + dcg(2*l1, -2*m, 2*l2, 2*m, 2*L, 0) * spherical_harmonics0(l1,-m,cost1) * spherical_harmonics0(l2,m,cost2)
     end do
   end function Yfunc
 
@@ -1447,4 +1498,5 @@ contains
     if(t==0) res = GM_form_factor(Q,-1) + GM_form_factor(Q,1)
     if(t==1) res = GM_form_factor(Q,-1) - GM_form_factor(Q,1)
   end function GM_form_factor_iso
+
 end module OneBodyLabOps

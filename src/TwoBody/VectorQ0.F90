@@ -1,7 +1,3 @@
-!
-! This is for an independent test of the two-body multipole operators.
-! Do not use.
-!
 module VectorQ0
   !$ use omp_lib
   use StoreCouplings
@@ -44,7 +40,7 @@ contains
 
   subroutine show_options(this)
     class(VectorCurrentQ0), intent(in) :: this
-    write(*,"(a)") "# Calculation options for axial current operator @ Q=0"
+    write(*,"(a)") "# Calculation options for vector current operator @ Q=0"
     write(*,"(2a)") "# Operator: ", trim(this%OpName)
     write(*,"(a,i3)") "# Order of chiral expansion: ", this%ch_order
     !write(*,"(a,f8.4,a,f8.4,a,f8.4,a,f8.4,a)") "# c1= ", this%c1, " GeV-1, c2= ", &
@@ -123,55 +119,15 @@ contains
     real(8), intent(in) :: pbra, pket
     integer, intent(in) :: lbra, sbra, jbra, zbra, lket, sket, jket, zket
     logical, intent(in) :: pn_formalism
-    real(8) :: r, phbra, phket, norm
-    integer :: ibra, iket
-    integer, allocatable :: z1bras(:), z2bras(:), z1kets(:), z2kets(:)
+    real(8) :: r
     type(MomFunctions) :: fq
-
-    if(zbra==-1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [-1]
-      z2bras = [-1]
-    elseif(zbra==1) then
-      allocate(z1bras(1), z2bras(1))
-      z1bras = [1]
-      z2bras = [1]
-    elseif(zbra==0) then
-      allocate(z1bras(2), z2bras(2))
-      z1bras = [-1,1]
-      z2bras = [1,-1]
-    end if
-
-    if(zket==-1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [-1]
-      z2kets = [-1]
-    elseif(zket==1) then
-      allocate(z1kets(1), z2kets(1))
-      z1kets = [1]
-      z2kets = [1]
-    elseif(zket==0) then
-      allocate(z1kets(2), z2kets(2))
-      z1kets = [-1,1]
-      z2kets = [1,-1]
-    end if
 
     call set_mom_functions(this, fq, pbra, pket)
     r = 0.d0
     if(pn_formalism) then
-      norm = 1.d0 / sqrt(dble(size(z1bras) * size(z1kets)) )
-      do ibra = 1, size(z1bras)
-        phbra = 1.d0
-        if(z1bras(ibra)==1 .and. z2bras(ibra)==-1) phbra = (-1.d0)**(lbra+sbra)
-        do iket = 1, size(z1kets)
-          phket = 1.d0
-          if(z1kets(iket)==1 .and. z2kets(iket)==-1) phket = (-1.d0)**(lket+sket)
-          fq%op(:,:,:,:) = 0.d0
-          call set_helicity_rep_pn(this, fq, pbra, pket, z1bras(ibra), z2bras(ibra), z1kets(iket), z2kets(iket))
-          r = r + this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket) * phbra * phket
-        end do
-      end do
-      r = r * norm
+      fq%op(:,:,:,:) = 0.d0
+      call set_helicity_rep_pn(this, fq, pbra, pket, lbra, sbra, zbra, lket, sket, zket)
+      r = r + this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket) 
     else
       fq%op(:,:,:,:) = 0.d0
       call set_helicity_rep_isospin(this, fq, pbra, pket, zbra, zket)
@@ -179,15 +135,14 @@ contains
     end if
 
     call release_mom_functions(fq)
-    deallocate(z1bras, z2bras, z1kets, z2kets)
   end function calc_matrix_element
 
-  subroutine set_helicity_rep_pn(this, fq, pbra, pket, z1bra, z2bra, z1ket, z2ket)
-    use MyLibrary, only: pi, tau_1, tau_m, tau1_cross_tau2
+  subroutine set_helicity_rep_pn(this, fq, pbra, pket, lbra, sbra, zbra, lket, sket, zket)
+    use MyLibrary
     type(VectorCurrentQ0), intent(in) :: this
     type(MomFunctions), intent(inout) :: fq
     real(8), intent(in) :: pbra, pket
-    integer, intent(in) :: z1bra, z2bra, z1ket, z2ket
+    integer, intent(in) :: lbra, sbra, zbra, lket, sket, zket
     integer :: ibra, iket, i, m
     integer :: lams_bra(2), lams_ket(2)
     real(8), allocatable :: v1(:), v2(:)
@@ -199,8 +154,7 @@ contains
     v1(:) = 0.d0; v2(:) = 0.d0
     call qdep_term_seagull( this, fq, v1 )
     call qdep_term_pif( this, fq, v2 )
-    tau_x_tau = tau1_cross_tau2(z1bra,z2bra,z1ket,z2ket,1,(z1ket+z2ket-z1bra-z2bra)/2,phase=-1) * (-1.d0) ! -1 is from i^2
-
+    tau_x_tau = asym_isospin_func_pn(lbra, sbra, zbra, lket, sket, zket, tau1_cross_tau2, 1, zket-zbra, phase=-1) * (-1.d0)
     do ibra = 1, this%GetNumHeli()
       lams_bra = this%GetHelicities(ibra)
       do iket = 1, this%GetNumHeli()
@@ -209,10 +163,10 @@ contains
           do i = 1, this%GetNMesh()
             fq%op(i,m,ibra,iket) = &
                 & v1(i) * tau_x_tau * &
-                & (s1_dot_q_s2(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, m, i) - &
+                & (s1_dot_q_s2(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, m, i) + &
                 &  s2_dot_q_s1(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, m, i)) - &
-                & 2.d0 * v2(i) * tau_x_tau * &
-                & (s1_dot_q_s2_dot_q_q(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, m, i))
+                & v2(i) * tau_x_tau * &
+                & s1_dot_q_s2_dot_q_q(lams_bra(1), lams_bra(2), lams_ket(1), lams_ket(2), pbra, pket, m, i)
           end do
         end do
       end do
@@ -255,7 +209,7 @@ contains
 
     if(this%ch_order < 1) return
     do i = 1, this%GetNMesh()
-      v(i) = v(i) + 0.25d0 * g_A**2 / f_pi**2 * fq%pi_prop(i)**2
+      v(i) = v(i) + 0.5d0 * g_A**2 / f_pi**2 * fq%pi_prop(i)**2
     end do
     if(this%ch_order < 2) return
   end subroutine qdep_term_pif
