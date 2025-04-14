@@ -81,6 +81,15 @@ cd $HOME/exe
 python3 NuHamil_3BME.py
 ```
 
+* Multipole decomposition of 2BCs.
+This is a quick test to generate the rank 1 magnetic multipole operator for the vector LO 2BCs.
+If you increase $e_{\rm max}$, it will take a while.
+See arXiv:2504.08711 for the details.
+```
+cd $HOME/exe
+python3 Multipoles.py
+```
+
 # Quick benchmarks
 Using the NN+3N interaction generated in the above example and the imsrg++ code (https://github.com/ragnarstroberg/imsrg), the ground-state energies of doubly-magic nuclei are the following.
 | Nucleus | Interaction| $\lambda_{\rm SRG} \ ({\rm fm}^{-1})$|$e_{\rm max}$ | $E_{\rm 3max}$| $\hbar\omega \ ({\rm MeV})$|$E_{\rm g.s.} \ ({\rm MeV})$ |
