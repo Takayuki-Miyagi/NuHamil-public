@@ -58,7 +58,7 @@ def main(filename, J=0, Prty=1, S=0, Tz=0, byte_order='little', channel='--'):
     divider=make_axes_locatable(ax)
     cax = divider.append_axes('right','5%',pad='3%')
     cbar = fig.colorbar(im,ax=ax, cax=cax)
-    cbar.set_label(r"$V(k',k)$ (MeV fm$^{-3}$)")
+    cbar.set_label(r"$V(k',k)$ (MeV fm$^{3}$)")
     ax.set_xlabel("$k$ (fm$^{-1}$)")
     ax.set_ylabel("$k'$ (fm$^{-1}$)")
     plt.show()
