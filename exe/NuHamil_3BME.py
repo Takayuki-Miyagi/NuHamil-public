@@ -282,6 +282,16 @@ def set_three_body_force(params):
         params['lambda_3nf_nonlocal'] = 500
         return
 
+    if(params["3nf"]=="N3LO_texas"):
+        params['NNInt'] = 'N3LO_texas'
+        params['Regulator'] = 'NonLocal'
+        params['RegulatorPower'] = 4 
+        params['LECs'] = [-1.07, -5.32, 3.56, -5.060563, -1.034629]
+        params['lambda_3nf_nonlocal'] = 394 
+        if(params['rank'] > 2): params['renorm'] = 'bare'
+        return
+
+
     print("Unknown three-body force keyword" + params["3nf"])
     sys.exit()
 
