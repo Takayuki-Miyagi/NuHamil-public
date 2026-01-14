@@ -1203,17 +1203,19 @@ contains
     integer, intent(in), optional :: phase
     integer, allocatable :: z1bra(:), z2bra(:), z1ket(:), z2ket(:)
     real(8) :: r, tmp
-    integer :: ibra, iket
+    integer :: ibra, iket, iphase
     real(8) :: norm, ph_bra, ph_ket
+    iphase = -1 
+    if(present(phase)) iphase = phase
     call pn_combinations()
     norm = 1.d0 / sqrt(dble(size(z1bra)*size(z1ket)))
     r = 0.d0
     do ibra = 1, size(z1bra)
       ph_bra = 1.d0
-      if(z1bra(ibra)== -phase .and. z2bra(ibra)== phase) ph_bra = (-1.d0)**(lbra+sbra)
+      if(z1bra(ibra)== -iphase .and. z2bra(ibra)== iphase) ph_bra = (-1.d0)**(lbra+sbra)
       do iket = 1, size(z1ket)
         ph_ket = 1.d0
-        if(z1ket(iket)== -phase .and. z2ket(iket)== phase) ph_ket = (-1.d0)**(lket+sket)
+        if(z1ket(iket)== -iphase .and. z2ket(iket)== iphase) ph_ket = (-1.d0)**(lket+sket)
         tmp = func(z1bra(ibra),z2bra(ibra),z1ket(iket),z2ket(iket),rank,m,phase) * ph_bra*ph_ket
         tmp = make_beta_hermitian(tmp, rank, m, normalize=.false.)
         r = r + tmp
