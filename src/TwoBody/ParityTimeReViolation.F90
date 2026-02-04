@@ -184,13 +184,6 @@ contains
       r = this%do_pwd(fq%op, pbra, lbra, sbra, jbra, pket, lket, sket, jket)
     end if
 
-    ! this is for taking into accout the additional i in the operator
-    if(mod(abs(lbra-lket),2) == 0) then
-      r = r * dble(i_unit ** (lbra-lket)) * dble(i_unit ** (lbra-lket+1)) ! skew, unit of i
-    else
-      r = r * dble(i_unit ** (lbra-lket-1)) * dble(i_unit ** (lbra-lket))  ! symmetric
-    end if
-
     call release_mom_functions(fq)
   end function calc_matrix_element
 
