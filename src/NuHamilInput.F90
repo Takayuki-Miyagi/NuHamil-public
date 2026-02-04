@@ -595,9 +595,9 @@ contains
     params2%file_name_nn_converted = params1%file_name_nn_converted
     params2%file_name_3n_converted = params1%file_name_3n_converted
     params2%emax_convert = params1%emax_convert
-    params2%e2max_convert = params2%e2max_convert
-    params2%e3max_convert = params2%e3max_convert
-    params2%lmax_convert = params2%lmax_convert
+    params2%e2max_convert = params1%e2max_convert
+    params2%e3max_convert = params1%e3max_convert
+    params2%lmax_convert = params1%lmax_convert
     params2%averaged_file_for_test = params1%averaged_file_for_test
     params2%NNrel_op_input = params1%NNrel_op_input
     params2%NNrel_op_output = params1%NNrel_op_output
