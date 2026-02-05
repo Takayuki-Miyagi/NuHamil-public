@@ -3220,17 +3220,7 @@ contains
     read(15,*)
     do i = 1, cnt
       read(15,*) a, b, c, d, J, v
-      oa => ms%sps%orb(a)
-      ob => ms%sps%orb(b)
-      oc => ms%sps%orb(c)
-      od => ms%sps%orb(d)
-      if(oa%z + ob%z /= oc%z + od%z) cycle
-      if((-1) ** (oa%l + ob%l + oc%l + od%l) /= 1) cycle
-      ch = ms%jpz2idx(J, (-1)**(oa%l+ob%l), (oa%z+ob%z)/2)
-      bra = ms%jpz(ch)%GetIndex(a,b)
-      ket = ms%jpz(ch)%GetIndex(c,d)
-      ph = ms%jpz(ch)%GetPhase(a,b) * ms%jpz(ch)%GetPhase(c,d)
-      this%MatCh(ch,ch)%m(bra,ket) = v * ph
+      call this%SetTBME(a,b,c,d,J,v)
     end do
     close(15)
   end subroutine read_scalar_operator_ascii_myg
@@ -3259,17 +3249,7 @@ contains
       d = id(i)
       J = jj(i)
       v = v2(i)
-      oa => ms%sps%orb(a)
-      ob => ms%sps%orb(b)
-      oc => ms%sps%orb(c)
-      od => ms%sps%orb(d)
-      if(oa%z + ob%z /= oc%z + od%z) cycle
-      if((-1) ** (oa%l + ob%l + oc%l + od%l) /= 1) cycle
-      ch = ms%jpz2idx(J, (-1)**(oa%l+ob%l), (oa%z+ob%z)/2)
-      bra = ms%jpz(ch)%GetIndex(a,b)
-      ket = ms%jpz(ch)%GetIndex(c,d)
-      ph = ms%jpz(ch)%GetPhase(a,b) * ms%jpz(ch)%GetPhase(c,d)
-      this%MatCh(ch,ch)%m(bra,ket) = v * ph
+      call this%SetTBME(a,b,c,d,J,v)
     end do
 
     deallocate(ia)
@@ -3331,11 +3311,7 @@ contains
       b = sps%nljz2idx(ob%n, ob%l, ob%j, ob%z)
       c = sps%nljz2idx(oc%n, oc%l, oc%j, oc%z)
       d = sps%nljz2idx(od%n, od%l, od%j, od%z)
-      ch = two%jpz2idx(J, (-1)**(oa%l+ob%l), (oa%z+ob%z)/2)
-      bra = two%jpz(ch)%GetIndex(a,b)
-      ket = two%jpz(ch)%GetIndex(c,d)
-      ph = two%jpz(ch)%GetPhase(a,b) * two%jpz(ch)%GetPhase(c,d)
-      this%MatCh(ch,ch)%m(bra,ket) = me * ph
+      call this%SetTBME(a,b,c,d,J,me)
     end do
     close(15)
 
@@ -3394,11 +3370,7 @@ contains
       b = sps%nljz2idx(ob%n, ob%l, ob%j, ob%z)
       c = sps%nljz2idx(oc%n, oc%l, oc%j, oc%z)
       d = sps%nljz2idx(od%n, od%l, od%j, od%z)
-      ch = two%jpz2idx(J, (-1)**(oa%l+ob%l), (oa%z+ob%z)/2)
-      bra = two%jpz(ch)%GetIndex(a,b)
-      ket = two%jpz(ch)%GetIndex(c,d)
-      ph = two%jpz(ch)%GetPhase(a,b) * two%jpz(ch)%GetPhase(c,d)
-      this%MatCh(ch,ch)%m(bra,ket) = me * ph
+      call this%SetTBME(a, b, c, d, J, me)
     end do
     close(15)
     call sps_snt%fin()
@@ -3459,7 +3431,7 @@ contains
       ph = two%jpz(ch)%GetPhase(a,b) * two%jpz(ch)%GetPhase(c,d)
       Tcm2 = p_dot_p([oa%n, oa%l, oa%j, oa%z], [ob%n, ob%l, ob%j, ob%z], &
           & [oc%n, oc%l, oc%j, oc%z], [od%n, od%l, od%j, od%z], j) * dble(two%mass_snt) / two%GetFrequency()
-      v = me + Tcm2
+      call this%SetTBME(a,b,c,d,J,v)
       this%MatCh(ch,ch)%m(bra,ket) = v * ph
     end do
     close(15)
