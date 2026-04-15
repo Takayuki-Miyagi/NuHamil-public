@@ -3,7 +3,7 @@
 # script to submit the job
 # execute ./NuHamil.py
 # Normalization is different from usual GamowTeller operator, sigma tau
-# To combine with sigma tau operator, you need to multiply -gA / sqrt(2) to the result matrix elements
+# To combine with sigma tau operator, you need to multiply -sqrt(2)/gA to the result matrix elements
 import os
 import sys
 import subprocess
